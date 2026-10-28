@@ -1,0 +1,83 @@
+<｜begin▁of▁sentence｜><｜System｜>Reasoning Effort: 75 (range 1-100, the higher the value, the more thorough the reasoning)
+
+You are a coding assistant working in a local Rust repository. Read before editing. Preserve user changes, explain concrete findings, and verify your final changes. Code comments are English; documentation is Russian. Never invent tool results.
+You are a coding assistant working in a local Rust repository. Read before editing. Preserve user changes, explain concrete findings, and verify your final changes. Code comments are English; documentation is Russian. Never invent tool results.
+You are a coding assistant working in a local Rust repository. Read before editing. Preserve user changes, explain concrete findings, and verify your final changes. Code comments are English; documentation is Russian. Never invent tool results.
+You are a coding assistant working in a local Rust repository. Read before editing. Preserve user changes, explain concrete findings, and verify your final changes. Code comments are English; documentation is Russian. Never invent tool results.
+You are a coding assistant working in a local Rust repository. Read before editing. Preserve user changes, explain concrete findings, and verify your final changes. Code comments are English; documentation is Russian. Never invent tool results.
+You are a coding assistant working in a local Rust repository. Read before editing. Preserve user changes, explain concrete findings, and verify your final changes. Code comments are English; documentation is Russian. Never invent tool results.
+You are a coding assistant working in a local Rust repository. Read before editing. Preserve user changes, explain concrete findings, and verify your final changes. Code comments are English; documentation is Russian. Never invent tool results.
+You are a coding assistant working in a local Rust repository. Read before editing. Preserve user changes, explain concrete findings, and verify your final changes. Code comments are English; documentation is Russian. Never invent tool results.
+You are a coding assistant working in a local Rust repository. Read before editing. Preserve user changes, explain concrete findings, and verify your final changes. Code comments are English; documentation is Russian. Never invent tool results.
+You are a coding assistant working in a local Rust repository. Read before editing. Preserve user changes, explain concrete findings, and verify your final changes. Code comments are English; documentation is Russian. Never invent tool results.
+You are a coding assistant working in a local Rust repository. Read before editing. Preserve user changes, explain concrete findings, and verify your final changes. Code comments are English; documentation is Russian. Never invent tool results.
+You are a coding assistant working in a local Rust repository. Read before editing. Preserve user changes, explain concrete findings, and verify your final changes. Code comments are English; documentation is Russian. Never invent tool results.
+You are a coding assistant working in a local Rust repository. Read before editing. Preserve user changes, explain concrete findings, and verify your final changes. Code comments are English; documentation is Russian. Never invent tool results.
+You are a coding assistant working in a local Rust repository. Read before editing. Preserve user changes, explain concrete findings, and verify your final changes. Code comments are English; documentation is Russian. Never invent tool results.
+You are a coding assistant working in a local Rust repository. Read before editing. Preserve user changes, explain concrete findings, and verify your final changes. Code comments are English; documentation is Russian. Never invent tool results.
+You are a coding assistant working in a local Rust repository. Read before editing. Preserve user changes, explain concrete findings, and verify your final changes. Code comments are English; documentation is Russian. Never invent tool results.
+You are a coding assistant working in a local Rust repository. Read before editing. Preserve user changes, explain concrete findings, and verify your final changes. Code comments are English; documentation is Russian. Never invent tool results.
+You are a coding assistant working in a local Rust repository. Read before editing. Preserve user changes, explain concrete findings, and verify your final changes. Code comments are English; documentation is Russian. Never invent tool results.
+You are a coding assistant working in a local Rust repository. Read before editing. Preserve user changes, explain concrete findings, and verify your final changes. Code comments are English; documentation is Russian. Never invent tool results.
+You are a coding assistant working in a local Rust repository. Read before editing. Preserve user changes, explain concrete findings, and verify your final changes. Code comments are English; documentation is Russian. Never invent tool results.
+You are a coding assistant working in a local Rust repository. Read before editing. Preserve user changes, explain concrete findings, and verify your final changes. Code comments are English; documentation is Russian. Never invent tool results.
+You are a coding assistant working in a local Rust repository. Read before editing. Preserve user changes, explain concrete findings, and verify your final changes. Code comments are English; documentation is Russian. Never invent tool results.
+You are a coding assistant working in a local Rust repository. Read before editing. Preserve user changes, explain concrete findings, and verify your final changes. Code comments are English; documentation is Russian. Never invent tool results.
+You are a coding assistant working in a local Rust repository. Read before editing. Preserve user changes, explain concrete findings, and verify your final changes. Code comments are English; documentation is Russian. Never invent tool results.
+
+
+## Tools
+
+You have access to a set of tools to help answer the user's question. You can invoke tools by writing a "<｜DSML｜ calls>" block like the following:
+
+<｜DSML｜ calls>
+<｜DSML｜ invoke name="$TOOL_NAME">
+<｜DSML｜ parameter name="$PARAMETER_NAME" string="true|false">$PARAMETER_VALUE</｜DSML｜ parameter>
+...
+</｜DSML｜ invoke>
+<｜DSML｜ invoke name="$TOOL_NAME2">
+...
+</｜DSML｜ invoke>
+</｜DSML｜ calls>
+
+String parameters should be specified as is and set `string="true"`. For all other types (numbers, booleans, arrays, objects), pass the value in JSON format and set `string="false"`.
+
+If thinking_mode is enabled (triggered by <think>), you MUST output your complete reasoning inside <think>...</think> BEFORE any tool calls or final response.
+
+Otherwise, output directly after </think> with tool calls or final response.
+
+### Available Tool Schemas
+
+{"name": "lookup", "description": "Execute lookup", "parameters": {"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer"}, "exact": {"type": "boolean"}}, "required": ["query", "limit", "exact"]}}
+{"name": "store", "description": "Execute store", "parameters": {"type": "object", "properties": {"record": {"type": "object", "properties": {"label": {"type": "string"}}}, "tags": {"type": "array", "items": {"type": "string"}}}, "required": ["record", "tags"]}}
+{"name": "finish", "description": "Execute finish", "parameters": {"type": "object", "properties": {"ok": {"type": "boolean"}}, "required": ["ok"]}}
+{"name": "read_file", "description": "Execute read_file", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}
+{"name": "run", "description": "Execute run", "parameters": {"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"]}}
+{"name": "edit_file", "description": "Execute edit_file", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "text": {"type": "string"}}, "required": ["path", "text"]}}
+
+You MUST strictly follow the above defined tool name and parameter schemas to invoke tool calls.
+<｜User｜>Turn 1: inspect src/module_0.rs and explain the next change.<｜Assistant｜><think>Inspect module 0 before deciding.</think>
+
+<｜DSML｜ calls>
+<｜DSML｜ invoke name="read_file">
+<｜DSML｜ parameter name="path" string="true">src/module_0.rs</｜DSML｜ parameter>
+</｜DSML｜ invoke>
+</｜DSML｜ calls><｜end▁of▁sentence｜><｜User｜><tool_result>pub fn value_0() -> u32 { 0 }</tool_result><｜Assistant｜><think>Verified the file.</think>Module 0 returns 0.<｜end▁of▁sentence｜><｜User｜>Turn 2: inspect src/module_1.rs and explain the next change.<｜Assistant｜><think>Inspect module 1 before deciding.</think>
+
+<｜DSML｜ calls>
+<｜DSML｜ invoke name="read_file">
+<｜DSML｜ parameter name="path" string="true">src/module_1.rs</｜DSML｜ parameter>
+</｜DSML｜ invoke>
+</｜DSML｜ calls><｜end▁of▁sentence｜><｜User｜><tool_result>pub fn value_1() -> u32 { 1 }</tool_result><｜Assistant｜><think>Verified the file.</think>Module 1 returns 1.<｜end▁of▁sentence｜><｜User｜>Turn 3: inspect src/module_2.rs and explain the next change.<｜Assistant｜><think>Inspect module 2 before deciding.</think>
+
+<｜DSML｜ calls>
+<｜DSML｜ invoke name="read_file">
+<｜DSML｜ parameter name="path" string="true">src/module_2.rs</｜DSML｜ parameter>
+</｜DSML｜ invoke>
+</｜DSML｜ calls><｜end▁of▁sentence｜><｜User｜><tool_result>pub fn value_2() -> u32 { 2 }</tool_result><｜Assistant｜><think>Verified the file.</think>Module 2 returns 2.<｜end▁of▁sentence｜><｜User｜>Turn 4: inspect src/module_3.rs and explain the next change.<｜Assistant｜><think>Inspect module 3 before deciding.</think>
+
+<｜DSML｜ calls>
+<｜DSML｜ invoke name="read_file">
+<｜DSML｜ parameter name="path" string="true">src/module_3.rs</｜DSML｜ parameter>
+</｜DSML｜ invoke>
+</｜DSML｜ calls><｜end▁of▁sentence｜><｜User｜><tool_result>pub fn value_3() -> u32 { 3 }</tool_result><｜Assistant｜><think>Verified the file.</think>Module 3 returns 3.<｜end▁of▁sentence｜><｜User｜>Now implement and verify the combined change.<｜Assistant｜><think>

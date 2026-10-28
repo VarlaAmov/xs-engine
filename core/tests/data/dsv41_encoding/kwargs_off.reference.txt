@@ -1,0 +1,1 @@
+<｜begin▁of▁sentence｜><｜User｜>Question: café, 中文, <think>literal</think>?<｜Assistant｜></think>

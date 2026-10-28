@@ -1,0 +1,46 @@
+<｜begin▁of▁sentence｜><｜System｜>Reasoning Effort: 75 (range 1-100, the higher the value, the more thorough the reasoning)
+
+Use tools carefully.
+
+## Tools
+
+You have access to a set of tools to help answer the user's question. You can invoke tools by writing a "<｜DSML｜ calls>" block like the following:
+
+<｜DSML｜ calls>
+<｜DSML｜ invoke name="$TOOL_NAME">
+<｜DSML｜ parameter name="$PARAMETER_NAME" string="true|false">$PARAMETER_VALUE</｜DSML｜ parameter>
+...
+</｜DSML｜ invoke>
+<｜DSML｜ invoke name="$TOOL_NAME2">
+...
+</｜DSML｜ invoke>
+</｜DSML｜ calls>
+
+String parameters should be specified as is and set `string="true"`. For all other types (numbers, booleans, arrays, objects), pass the value in JSON format and set `string="false"`.
+
+If thinking_mode is enabled (triggered by <think>), you MUST output your complete reasoning inside <think>...</think> BEFORE any tool calls or final response.
+
+Otherwise, output directly after </think> with tool calls or final response.
+
+### Available Tool Schemas
+
+{"name": "lookup", "description": "Execute lookup", "parameters": {"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer"}, "exact": {"type": "boolean"}}, "required": ["query", "limit", "exact"]}}
+{"name": "store", "description": "Execute store", "parameters": {"type": "object", "properties": {"record": {"type": "object", "properties": {"label": {"type": "string"}}}, "tags": {"type": "array", "items": {"type": "string"}}}, "required": ["record", "tags"]}}
+{"name": "finish", "description": "Execute finish", "parameters": {"type": "object", "properties": {"ok": {"type": "boolean"}}, "required": ["ok"]}}
+
+You MUST strictly follow the above defined tool name and parameter schemas to invoke tool calls.
+<｜User｜>Find and store café.<｜Assistant｜><think>Need both tools.</think>Checking.
+
+<｜DSML｜ calls>
+<｜DSML｜ invoke name="lookup">
+<｜DSML｜ parameter name="query" string="true">café</｜DSML｜ parameter>
+<｜DSML｜ parameter name="limit" string="false">2</｜DSML｜ parameter>
+<｜DSML｜ parameter name="exact" string="false">true</｜DSML｜ parameter>
+</｜DSML｜ invoke>
+<｜DSML｜ invoke name="store">
+<｜DSML｜ parameter name="record" string="false">{"label": "中文"}</｜DSML｜ parameter>
+<｜DSML｜ parameter name="tags" string="false">["a", "b"]</｜DSML｜ parameter>
+</｜DSML｜ invoke>
+</｜DSML｜ calls><｜end▁of▁sentence｜><｜User｜><tool_result>found first</tool_result>
+
+<tool_result>stored second</tool_result><｜Assistant｜><think>Both completed.</think>Done.<｜end▁of▁sentence｜><｜User｜>What next?<｜Assistant｜><think>

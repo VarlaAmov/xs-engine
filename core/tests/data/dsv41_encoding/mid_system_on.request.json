@@ -1,0 +1,22 @@
+{
+  "messages": [
+    {
+      "role": "system",
+      "content": "Be precise."
+    },
+    {
+      "role": "user",
+      "content": "q1"
+    },
+    {
+      "role": "assistant",
+      "reasoning_content": "old private reasoning",
+      "content": "a1"
+    },
+    {
+      "role": "system",
+      "content": "New instruction: answer briefly."
+    }
+  ],
+  "thinking": true
+}
