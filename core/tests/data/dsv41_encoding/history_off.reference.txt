@@ -1,0 +1,1 @@
+<｜begin▁of▁sentence｜><｜System｜>Be precise.<｜User｜>q1<｜Assistant｜></think>a1<｜end▁of▁sentence｜><｜User｜>q2<｜Assistant｜></think>a2<｜end▁of▁sentence｜><｜User｜>q3<｜Assistant｜></think>

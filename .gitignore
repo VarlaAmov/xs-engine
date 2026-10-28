@@ -1,0 +1,9 @@
+target/
+__pycache__/
+*.pyc
+.env
+.env.*
+*.key
+*.pem
+sessions/
+*.log

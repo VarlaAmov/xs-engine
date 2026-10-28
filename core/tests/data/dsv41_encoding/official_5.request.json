@@ -1,0 +1,41 @@
+{
+  "reasoning_effort": "max",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a helpful vision assistant."
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "请按“第一张、第二张”的顺序回答：第一张图"
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+          }
+        },
+        {
+          "type": "text",
+          "text": "和第二张图"
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+          }
+        },
+        {
+          "type": "text",
+          "text": "中分别是什么食材？它们通常食用的部位分别是什么？"
+        }
+      ]
+    }
+  ],
+  "thinking": {
+    "type": "enabled"
+  }
+}
