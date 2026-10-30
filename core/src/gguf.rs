@@ -542,7 +542,9 @@ pub fn merge(src: &Path, out: &Path) -> Result<()> {
 mod split_tests {
     #[test]
     fn u32_array_round_trip() {
-        let src = std::path::Path::new(concat!(env!("HOME"), "/.node-llama-cpp/models/hf_ggml-org_embeddinggemma-300M-Q8_0.gguf"));
+        let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")).unwrap_or_default();
+        let src_buf = std::path::Path::new(&home).join(".node-llama-cpp/models/hf_ggml-org_embeddinggemma-300M-Q8_0.gguf");
+        let src = src_buf.as_path();
         if !src.exists() {
             return;
         }
