@@ -90,6 +90,8 @@ impl SafeTensors {
 
     /// madvise(MADV_RANDOM) on every mapping: no readahead (the Engram tables are read 264 bytes at a time)
     pub fn advise_random(&self) {
+        // Windows has no readahead hint for a mapping; the call is Unix-only.
+        #[cfg(unix)]
         for m in self.maps.iter().flatten() {
             let _ = m.advise(memmap2::Advice::Random);
         }
