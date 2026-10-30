@@ -67,10 +67,13 @@ fn roundtrip_with_uneven_writes_and_reads() {
     assert_eq!(found.len(), 1);
     let f = &found[0];
     assert_eq!((f.client.as_str(), f.pos, f.rollback, f.used_ms, f.data_len), ("owner", 12_345, Some(12_000), 42, data.len()));
-    // owner-only: the files hold whole conversations
-    use std::os::unix::fs::PermissionsExt;
-    assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
-    assert_eq!(std::fs::metadata(&d).unwrap().permissions().mode() & 0o777, 0o700);
+    // owner-only: the files hold whole conversations (Windows relies on the profile directory's inherited ACL)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(std::fs::metadata(&d).unwrap().permissions().mode() & 0o777, 0o700);
+    }
 }
 
 #[test]
