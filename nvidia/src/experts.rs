@@ -865,18 +865,15 @@ struct DirectReader {
 
 impl DirectReader {
     fn open(g: &crate::gguf::Gguf) -> Result<DirectReader> {
-        use std::os::unix::fs::OpenOptionsExt;
-        const O_DIRECT: i32 = 0o40000; // x86_64 Linux
         let mut files = vec![];
         for (p, map) in g.paths.iter().zip(&g.maps) {
-            let f = std::fs::OpenOptions::new().read(true).custom_flags(O_DIRECT).open(p)?;
+            let f = crate::osio::open_options(false, true).open(p)?;
             files.push((map.as_ptr() as usize, map.len(), f));
         }
         Ok(DirectReader { files })
     }
 
     fn read(&self, src: &[u8], dst: &mut [u8], bounce: &mut AlignedBuf) -> std::io::Result<()> {
-        use std::os::unix::fs::FileExt;
         let p = src.as_ptr() as usize;
         let Some((start, len, f)) = self.files.iter().find(|(s, n, _)| p >= *s && p + src.len() <= s + n) else {
             return Err(std::io::Error::other("range not in the model's files"));
@@ -888,7 +885,7 @@ impl DirectReader {
         let b = unsafe { std::slice::from_raw_parts_mut(bounce.ptr, a1 - a0) };
         let mut done = 0;
         while done < off + src.len() - a0 {
-            let n = f.read_at(&mut b[done..], (a0 + done) as u64)?;
+            let n = crate::osio::read_at(f, &mut b[done..], (a0 + done) as u64)?;
             if n == 0 {
                 return Err(std::io::Error::from(std::io::ErrorKind::UnexpectedEof));
             }

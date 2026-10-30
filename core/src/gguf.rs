@@ -317,7 +317,11 @@ impl Gguf {
     pub fn advise_random(&self, t: &TensorInfo) {
         let page = 4096u64;
         let start = t.offset / page * page;
+        // Windows has no readahead hint for a mapped range; the call is Unix-only.
+        #[cfg(unix)]
         let _ = self.maps[t.shard].advise_range(memmap2::Advice::Random, start as usize, (t.offset + t.bytes - start) as usize);
+        #[cfg(not(unix))]
+        let _ = start;
     }
 
     pub fn bytes(&self, t: &TensorInfo) -> &[u8] {
@@ -487,7 +491,7 @@ pub fn merge(src: &Path, out: &Path) -> Result<()> {
     let map = &g.maps[0];
     let mut c = Cursor { b: map, p: 24 };
     let nkv0 = u64::from_le_bytes(map[16..24].try_into()?) as usize;
-    let (mut nkv, mut kv_raw) = (0u64, vec![]);
+    let (mut nkv, mut kv_raw) = (0u64, Vec::<u8>::new());
     for _ in 0..nkv0 {
         let p0 = c.p;
         let k = c.string()?;
@@ -538,7 +542,9 @@ pub fn merge(src: &Path, out: &Path) -> Result<()> {
 mod split_tests {
     #[test]
     fn u32_array_round_trip() {
-        let src = std::path::Path::new(concat!(env!("HOME"), "/.node-llama-cpp/models/hf_ggml-org_embeddinggemma-300M-Q8_0.gguf"));
+        let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")).unwrap_or_default();
+        let src_buf = std::path::Path::new(&home).join(".node-llama-cpp/models/hf_ggml-org_embeddinggemma-300M-Q8_0.gguf");
+        let src = src_buf.as_path();
         if !src.exists() {
             return;
         }

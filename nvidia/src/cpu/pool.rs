@@ -55,8 +55,18 @@ pub struct Pool {
     handles: Vec<JoinHandle<()>>,
 }
 
+#[cfg(unix)]
 unsafe extern "C" {
     fn sched_setaffinity(pid: i32, cpusetsize: usize, mask: *const u64) -> i32;
+}
+
+#[cfg(windows)]
+#[link(name = "kernel32")]
+unsafe extern "system" {
+    fn GetCurrentThread() -> isize;
+    fn SetThreadAffinityMask(thread: isize, mask: usize) -> usize;
+    fn GetCurrentProcess() -> isize;
+    fn GetProcessAffinityMask(process: isize, process_mask: *mut usize, system_mask: *mut usize) -> i32;
 }
 
 /// Pin the calling thread to one logical CPU.
@@ -71,7 +81,16 @@ pub fn pin_to_set(cpus: &[usize]) -> bool {
         if cpu >= 1024 { return false; }
         set[cpu / 64] |= 1 << (cpu % 64);
     }
-    unsafe { sched_setaffinity(0, std::mem::size_of_val(&set), set.as_ptr()) == 0 }
+    #[cfg(unix)]
+    {
+        unsafe { sched_setaffinity(0, std::mem::size_of_val(&set), set.as_ptr()) == 0 }
+    }
+    // one processor group of up to 64 logical CPUs, which covers this engine's single-socket targets
+    #[cfg(windows)]
+    {
+        if cpus.iter().any(|&cpu| cpu >= 64) { return false; }
+        unsafe { SetThreadAffinityMask(GetCurrentThread(), set[0] as usize) != 0 }
+    }
 }
 
 // i7-12700K: CPUs 0-15 are the 8 P-cores (two threads each), 16-19 the E-cores. Every spinning thread gets a CPU
@@ -119,6 +138,7 @@ pub fn parse_cpus(s: &str) -> Option<Vec<usize>> {
     (!v.is_empty() && v.iter().all(|&c| c < 1024)).then_some(v)
 }
 
+#[cfg(unix)]
 unsafe extern "C" {
     fn sched_getaffinity(pid: i32, cpusetsize: usize, mask: *mut u64) -> i32;
 }
@@ -126,8 +146,17 @@ unsafe extern "C" {
 /// the CPUs this process may run on (at first call)
 fn allowed() -> Vec<usize> {
     let mut set = [0u64; 16];
+    #[cfg(unix)]
     if unsafe { sched_getaffinity(0, std::mem::size_of_val(&set), set.as_mut_ptr()) } != 0 {
         return ALL_CPUS.to_vec();
+    }
+    #[cfg(windows)]
+    {
+        let (mut process_mask, mut system_mask) = (0usize, 0usize);
+        if unsafe { GetProcessAffinityMask(GetCurrentProcess(), &mut process_mask, &mut system_mask) } == 0 {
+            return ALL_CPUS.to_vec();
+        }
+        set[0] = process_mask as u64;
     }
     (0..1024).filter(|&c| set[c / 64] >> (c % 64) & 1 == 1).collect()
 }
