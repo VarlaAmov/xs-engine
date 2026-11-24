@@ -21,6 +21,9 @@ and reuse conversation state instead of processing the same prompt again.
 This is an experimental engine specialized for the supported DeepSeek formats.
 The CUDA and HIP backends have different capabilities; results from one backend
 do not establish performance on the other. Model weights are supplied separately.
+The CUDA expert paths support mixed IQ1_S, IQ2_XXS, IQ2_XS, IQ2_S, IQ3_XXS and
+Q2_K blocks. Hybrid tri-split requires all potentially missed experts in the pinned
+arena and matching gate/up formats within each layer.
 
 ## Getting started
 

@@ -1,0 +1,130 @@
+{
+  "schema": 1,
+  "recorded": "2026-11-05",
+  "hardware": "2 x NVIDIA RTX 3090",
+  "backend": "CUDA 13 / sm86",
+  "model": "DeepSeek-V4.1-Flash-1017 UD-IQ1_M",
+  "engram": "Shared IQ4_NL replacement; not the original Unsloth Engram",
+  "placement": {
+    "DSX_ADAPT": 0,
+    "arena_gb": 150,
+    "engram_cache_gb": 6,
+    "split": [
+      1,
+      4,
+      4
+    ]
+  },
+  "protocol": {
+    "mode": "teacher-forced decode",
+    "sequence_length": 1024,
+    "teacher_topk": 256
+  },
+  "single_sequence": {
+    "positions": 1023,
+    "baseline": {
+      "seconds": 122.07,
+      "tokens_per_second": 8.38,
+      "kl_top256": 0.180392,
+      "top1_agree": 0.848485,
+      "perplexity": 9.7473,
+      "tri_split": false
+    },
+    "candidate": {
+      "seconds": 48.59,
+      "tokens_per_second": 21.05,
+      "kl_top256": 0.180567,
+      "top1_agree": 0.853372,
+      "perplexity": 9.8,
+      "tri_split": true
+    }
+  },
+  "eight_sequences": {
+    "positions": 8184,
+    "historical_baseline": {
+      "kl_top256": 0.207267,
+      "top1_agree": 0.812439,
+      "perplexity": 8.9911
+    },
+    "candidate": {
+      "seconds": 384.06,
+      "tokens_per_second": 21.31,
+      "nll": 2.196452,
+      "kl_top256": 0.207122,
+      "top1_agree": 0.814272,
+      "perplexity": 8.9931
+    }
+  },
+  "generation_smoke": {
+    "input_tokens": 8192,
+    "output_tokens": 256,
+    "context_allocation": 327680,
+    "prefill_chunk": 4096,
+    "prefill_seconds": 14.82,
+    "prefill_tokens_per_second": 553,
+    "decode_seconds": 10.42,
+    "decode_tokens_per_second": 24.56
+  },
+  "xxs_eight_sequences": {
+    "model": "DeepSeek-V4.1-Flash-1017 UD-IQ2_XXS",
+    "positions": 8184,
+    "seconds": 442.43,
+    "tokens_per_second": 18.5,
+    "nll": 2.277375,
+    "kl_top256": 0.201833,
+    "top1_agree": 0.818793,
+    "perplexity": 9.751,
+    "tri_split": true,
+    "file_fallback_experts": 0
+  },
+  "adaptive_generation_pair": {
+    "input_tokens": 8192,
+    "output_tokens": 512,
+    "context_allocation": 327680,
+    "prefill_chunk": 4096,
+    "DSX_ADAPT": 16,
+    "DSX_ADAPT_EARLY": 1,
+    "saved_heat": false,
+    "xs_iq2_xs": {
+      "prefill_seconds": 14.36,
+      "prefill_tokens_per_second": 571,
+      "decode_seconds": 13.16,
+      "decode_tokens_per_second": 38.92
+    },
+    "ud_iq1_m": {
+      "prefill_seconds": 13.95,
+      "prefill_tokens_per_second": 587,
+      "decode_seconds": 13.07,
+      "decode_tokens_per_second": 39.16
+    }
+  },
+  "xxs_main_adaptive_aux_static": {
+    "input_tokens": 32768,
+    "output_tokens": 512,
+    "warm_tokens_per_second": [32.48, 32.17]
+  },
+  "optimized_iq1_m": {
+    "changes": ["Q6 q16 for large long-K matrices", "BF16 rounding in the Q6 o_a epilogue"],
+    "eight_sequences": {
+      "positions": 8184,
+      "seconds": 366.39,
+      "tokens_per_second": 22.34,
+      "nll": 2.202008,
+      "kl_top256": 0.206163,
+      "top1_agree": 0.813661,
+      "perplexity": 9.0432
+    },
+    "warm_32k_tokens_per_second": [42.52, 42.06],
+    "warm_real_94k_tokens_per_second": [39.91, 39.78],
+    "server_acceptance": ["arithmetic API", "three vision cases", "8K/32K streaming", "expert heat save and reload"]
+  },
+  "limitations": [
+    "Background model download and checksum I/O remained active during the initial pair; no general percentage speedup is claimed.",
+    "Model startup and host-memory reclamation differed and are excluded from decode timings.",
+    "Historical baseline throughput is not a controlled comparison.",
+    "A complete 320K input was not tested.",
+    "Making both UD-IQ2_XXS stores adaptive at a 150 GB arena was not qualified; main adaptive/static aux was measured instead.",
+    "Small single-pair differences do not establish a general model advantage.",
+    "Q16 changes FP32 accumulation order; acceptance is based on the full quality evaluation, not bitwise logits equality."
+  ]
+}

@@ -21,6 +21,7 @@ fn random_rows(ty: GType, rows: usize, cols: usize, seed: &mut u64) -> Vec<u8> {
         GType::Q8_0 | GType::Q2_0 | GType::Iq2Xxs | GType::Iq1M | GType::Iq3Xxs | GType::Iq1S | GType::Iq2Xs | GType::Iq2S => 0,
         GType::Ptq1_0 => 26,
         GType::Q3K => 108,
+        GType::Q2K => 80,
         _ => unreachable!(),
     };
     let scale = if ty == GType::Q8_0 { 1e-3 } else { 0.01 };
@@ -34,7 +35,13 @@ fn random_rows(ty: GType, rows: usize, cols: usize, seed: &mut u64) -> Vec<u8> {
                 let sc=(old & 0x0fff)|(((d>>(4*i))&15)<<12);
                 v[off..off+2].copy_from_slice(&sc.to_le_bytes());
             }
-        } else { v[blk * b + at..blk * b + at + 2].copy_from_slice(&s); }
+        } else {
+            v[blk * b + at..blk * b + at + 2].copy_from_slice(&s);
+            if ty == GType::Q2K {
+                let dm = half::f16::from_f32(scale * (0.5 + (rng(seed) % 100) as f32 * 0.01)).to_le_bytes();
+                v[blk * b + 82..blk * b + 84].copy_from_slice(&dm);
+            }
+        }
     }
     v
 }
@@ -88,7 +95,7 @@ fn quant(g: &Gpu, x: u64, k: usize, nvec: usize) -> QBufs {
 fn fast_gemv_matches_cpu() {
     let g = Gpu::new(0).unwrap();
     let mut seed = 0x1234_5678_9abc_def0u64;
-    for ty in [GType::Q8_0, GType::Q2_0, GType::Ptq1_0, GType::Q3K, GType::Iq2Xxs, GType::Iq1S, GType::Iq2Xs, GType::Iq2S, GType::Iq1M, GType::Iq3Xxs] {
+    for ty in [GType::Q8_0, GType::Q2_0, GType::Ptq1_0, GType::Q3K, GType::Q2K, GType::Iq2Xxs, GType::Iq1S, GType::Iq2Xs, GType::Iq2S, GType::Iq1M, GType::Iq3Xxs] {
         for (rows, k) in [(200usize, 5120usize), (136, 2304)] {
             let w = random_rows(ty, rows, k, &mut seed);
             let rb = ty.row_bytes(k);
@@ -144,6 +151,12 @@ fn fast_gemv_matches_cpu() {
                 eprintln!("{ty:?} {rows}x{k} T={t}: vs int8-x reference {eq:.1e}, vs f32 reference: max {ef:.2e}, rms {:.2e} (of rms)", err_rms(&want, &got));
                 assert!(eq < 1e-5, "{ty:?} {rows}x{k} T={t}: kernel differs from its exact reference");
                 assert!(ef < 2e-2, "{ty:?} {rows}x{k} T={t}: int8 activation error");
+                if ty == GType::Q2K {
+                    g.launch(g.kernel("gemv_q2_k").unwrap(), ((rows as u32).div_ceil(4), 1, 1), 128, 0,
+                        &[Arg::P(src.ptr), Arg::P(dx.ptr), Arg::P(dy.ptr), Arg::I(rows as i32), Arg::I(k as i32), Arg::I(t as i32), Arg::I(k as i32), Arg::I(rows as i32)]).unwrap();
+                    let raw: Vec<f32> = g.download(dy.ptr, t * rows).unwrap();
+                    assert!(err(&want, &raw) < 1e-5, "Q2_K raw GEMV");
+                }
             }
         }
     }
@@ -172,7 +185,7 @@ fn moe_fast_matches_moe_gu_down() {
     let g = Gpu::new(0).unwrap();
     let mut seed = 0x9e37_79b9_7f4a_7c15u64;
     let c = ExpCfg { n_layers: 2, n_experts: 14, inter: 2304, dim: 5120, lim: 10.0, rot: 0 };
-    let kinds = [(GType::Q2_0, GType::Q2_0), (GType::Ptq1_0, GType::Q2_0), (GType::Q3K, GType::Q3K), (GType::Q2_0, GType::Q3K), (GType::Ptq1_0, GType::Ptq1_0), (GType::Q8_0, GType::Q8_0)];
+    let kinds = [(GType::Q2_0, GType::Q2_0), (GType::Ptq1_0, GType::Q2_0), (GType::Q3K, GType::Q3K), (GType::Q2K, GType::Q2K), (GType::Q2_0, GType::Q3K), (GType::Ptq1_0, GType::Ptq1_0), (GType::Q8_0, GType::Q8_0)];
     // layer 1: experts 0..10 resident, 10..14 not
     let mats: Vec<(GType, GType, Vec<u8>, Vec<u8>, Vec<u8>)> = (0..10)
         .map(|e| {
@@ -270,7 +283,7 @@ fn moe_fast_iq_matches_cpu() {
     let g = Gpu::new(0).unwrap();
     let mut seed = 0x51ed_270b_27b9_d1a3u64;
     let c = ExpCfg { n_layers: 2, n_experts: 14, inter: 2304, dim: 5120, lim: 10.0, rot: 0 };
-    let kinds = [(GType::Iq2Xs,GType::Iq3Xxs), (GType::Iq3Xxs,GType::Iq2Xxs), (GType::Iq1M, GType::Iq2Xxs), (GType::Iq2Xs, GType::Iq1M), (GType::Iq1S, GType::Iq2Xxs), (GType::Iq2Xxs, GType::Iq2S), (GType::Iq2Xs, GType::Iq2Xs), (GType::Iq1S, GType::Q2_0), (GType::Ptq1_0, GType::Iq2S)];
+    let kinds = [(GType::Iq2Xs,GType::Iq3Xxs), (GType::Iq3Xxs,GType::Iq2Xxs), (GType::Iq1M, GType::Iq2Xxs), (GType::Iq2Xs, GType::Iq1M), (GType::Iq1S, GType::Iq2Xxs), (GType::Iq2Xxs, GType::Iq2S), (GType::Iq2Xs, GType::Iq2Xs), (GType::Iq1S, GType::Q2K), (GType::Q2K, GType::Iq2S)];
     let mats: Vec<(GType, GType, Vec<u8>, Vec<u8>, Vec<u8>)> = (0..10)
         .map(|e| {
             let (gu, dn) = kinds[e % kinds.len()];

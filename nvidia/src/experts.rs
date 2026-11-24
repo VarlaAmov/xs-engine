@@ -131,6 +131,7 @@ fn gemv_name(t: GType) -> Result<&'static str> {
         GType::Q2_0 => "gemv_q2_0",
         GType::Ptq1_0 => "gemv_ptq1_0",
         GType::Q3K => "gemv_q3_k",
+        GType::Q2K => "gemv_q2_k",
         GType::Q8_0 => "gemv_q8_0",
         t => bail!("no GPU expert kernel for {t:?}"),
     })
@@ -345,7 +346,7 @@ impl GpuExperts {
         }
         let tab = g.upload(&tab)?;
         let mut k = HashMap::new();
-        for n in ["gemv_q2_0", "gemv_ptq1_0", "gemv_q3_k", "gemv_q8_0", "swiglu_s", "add_inplace", "moe_gu", "moe_down", "quant_act", "moe_gu_fast", "moe_down_fast"] {
+        for n in ["gemv_q2_0", "gemv_ptq1_0", "gemv_q3_k", "gemv_q2_k", "gemv_q8_0", "swiglu_s", "add_inplace", "moe_gu", "moe_down", "quant_act", "moe_gu_fast", "moe_down_fast"] {
             k.insert(n, g.kernel(n)?);
         }
         let mut t16 = vec![None; c.n_layers];

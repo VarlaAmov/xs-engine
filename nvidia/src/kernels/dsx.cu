@@ -1001,6 +1001,40 @@ extern "C" __global__ void gemv_ptq1_0(const uint8_t *__restrict__ w, const floa
   }
 }
 
+
+// Raw ggml Q2_K, 256 weights / 84 bytes. Scale and minimum use independent
+// factors; 2-bit planes are interleaved across each 128-weight half.
+__device__ __forceinline__ float raw_q2k_value(const uint8_t *b, int e) {
+  const unsigned sc = b[e / 16];
+  const unsigned code = (b[16 + 32 * (e / 128) + e % 32] >> (2 * ((e / 32) % 4))) & 3;
+  return ld_h(b + 80) * (float)(sc & 15) * (float)code - ld_h(b + 82) * (float)(sc >> 4);
+}
+
+extern "C" __global__ void gemv_q2_k(const uint8_t *__restrict__ w, const float *__restrict__ x, float *__restrict__ y,
+                                     int rows, int k, int T, int ldx, int ldy) {
+  const int r = blockIdx.x * 4 + (threadIdx.x >> 5), lane = threadIdx.x & 31;
+  if (r >= rows) return;
+  const int nb = k / 256;
+  const uint8_t *wr = w + (size_t)r * nb * 84;
+  float acc[MAXT] = {0};
+  for (int sb = lane; sb < nb * 16; sb += 32) {
+    const int b = sb / 16, first = 16 * (sb % 16);
+    float weights[16];
+#pragma unroll
+    for (int i = 0; i < 16; i++) weights[i] = raw_q2k_value(wr + b * 84, first + i);
+    for (int t = 0; t < T; t++) {
+      const float *xp = x + (size_t)t * ldx + b * 256 + first;
+      float s = 0.f;
+#pragma unroll
+      for (int i = 0; i < 16; i++) s += weights[i] * xp[i];
+      acc[t] += s;
+    }
+  }
+  for (int t = 0; t < T; t++) {
+    const float s = warp_sum(acc[t]);
+    if (lane == 0) y[(size_t)t * ldy + r] = s;
+  }
+}
 // Q3_K: ggml block_q3_K, 256 weights / 110 B: hmask[32] qs[64] scales[12] d(fp16). Each lane takes a 16-weight
 // sub-block (16 per block), so a warp covers 2 blocks per step.
 extern "C" __global__ void gemv_q3_k(const uint8_t *__restrict__ w, const float *__restrict__ x, float *__restrict__ y,
@@ -1422,6 +1456,8 @@ extern "C" __global__ void dequant_f16(int t, const uint8_t *w, const uint8_t *s
     else { byte = 24 + (i - 120) % 2; n = (i - 120) / 2; }
     const uint32_t p3[5] = {1, 3, 9, 27, 81};
     v = ld_h(blk + 26) * trit(blk[byte], p3[n]);
+  } else if (t == 10) {  // Q2_K
+    v = raw_q2k_value(w + ((size_t)r * (k / 256) + c / 256) * 84, c & 255);
   } else if (t == 11) {  // Q3_K
     const uint8_t *blk = w + (size_t)r * (k / 256) * 110 + (c / 256) * 110;
     int e = c % 256, h = e >> 7, j = (e >> 5) & 3, l = e & 31, s16 = e / 16;
@@ -2245,7 +2281,7 @@ extern "C" __global__ void hc_reduce(const float *part, float *mixes, int hcd, i
 __device__ __forceinline__ float q6f(unsigned q, int b) {  // byte b of q as a float code - 32
   return __int_as_float(__byte_perm(q, 0x4B000000u, 0x7540 | b)) - 8388640.f;  // 2^23 + c - (2^23 + 32)
 }
-template <int PRW, int LPR>
+template <int PRW, int LPR, bool ROUND = false>
 __device__ __forceinline__ void gemv_q6(const uint8_t *__restrict__ lo, const float *__restrict__ x, float *__restrict__ y, int rows,
                                         int k, int T, int ldx, int ldy, const uint8_t *__restrict__ hi, const int8_t *__restrict__ sc,
                                         const __half *__restrict__ d, int rpg, int xgs) {
@@ -2298,7 +2334,7 @@ __device__ __forceinline__ void gemv_q6(const uint8_t *__restrict__ lo, const fl
       float s = acc[rr][t];
 #pragma unroll
       for (int o = LPR / 2; o > 0; o >>= 1) s += __shfl_xor_sync(0xffffffffu, s, o);
-      if (lane == 0 && r0 + rr < rows) y[(size_t)t * ldy + r0 + rr] = s;
+      if (lane == 0 && r0 + rr < rows) y[(size_t)t * ldy + r0 + rr] = ROUND ? bf16r(s) : s;
     }
 }
 #define Q6_ARGS                                                                                                        \
@@ -2311,6 +2347,8 @@ extern "C" __global__ void gemv_q6g4(Q6_ARGS, int rpg, int xgs) { gemv_q6<4, 32>
 extern "C" __global__ void gemv_q6g8(Q6_ARGS, int rpg, int xgs) { gemv_q6<8, 32>(lo, x, y, rows, k, T, ldx, ldy, hi, sc, d, rpg, xgs); }
 // 8 lanes per row, 4 rows per lane group (16 rows per warp): grid ceil(rows / 64), block 128; for k / 32 % 8 == 0
 extern "C" __global__ void gemv_q6s8(Q6_ARGS, int rpg, int xgs) { gemv_q6<4, 8>(lo, x, y, rows, k, T, ldx, ldy, hi, sc, d, rpg, xgs); }
+extern "C" __global__ void gemv_q6s8_bf(Q6_ARGS, int rpg, int xgs) { gemv_q6<4, 8, true>(lo, x, y, rows, k, T, ldx, ldy, hi, sc, d, rpg, xgs); }
+extern "C" __global__ void gemv_q6q16(Q6_ARGS, int rpg, int xgs) { gemv_q6<4, 16>(lo, x, y, rows, k, T, ldx, ldy, hi, sc, d, rpg, xgs); }
 
 // q6 planes -> f16 for prefill GEMMs: one thread per weight
 extern "C" __global__ void dequant_q6p_f16(const uint8_t *lo, const uint8_t *hi, const int8_t *sc, const __half *d, __half *out,

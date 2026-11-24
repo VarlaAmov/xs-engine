@@ -14,9 +14,9 @@ fn q6_gemv() {
         }
         let v: Vec<f32> = (0..k).map(|i| (i % 13) as f32 * 0.1 - 0.6).collect();
         let (dl, dh, ds, dd, dv, dy) = (g.upload(&lo).unwrap(), g.upload(&hi).unwrap(), g.upload(&sc).unwrap(), g.upload(&d).unwrap(), g.upload(&v).unwrap(), g.alloc(rows * 4).unwrap());
-        for (name, rpb) in [("gemv_q6p", 4u32), ("gemv_q6g4", 16), ("gemv_q6g8", 32)] {
-        let kk = g.kernel(name).unwrap();
         let args = [Arg::P(dl.ptr), Arg::P(dv.ptr), Arg::P(dy.ptr), Arg::I(rows as i32), Arg::I(k as i32), Arg::I(1), Arg::I(k as i32), Arg::I(rows as i32), Arg::P(dh.ptr), Arg::P(ds.ptr), Arg::P(dd.ptr), Arg::I(rows as i32), Arg::I(0)];
+        for (name, rpb) in [("gemv_q6p", 4u32), ("gemv_q6g4", 16), ("gemv_q6g8", 32), ("gemv_q6q16", 32)] {
+        let kk = g.kernel(name).unwrap();
         g.launch(kk, ((rows as u32).div_ceil(rpb), 1, 1), 128, 0, &args).unwrap();
         let got: Vec<f32> = g.download(dy.ptr, rows).unwrap();
         for r in (0..rows).step_by((rows / 8).max(1)) {
@@ -28,6 +28,15 @@ fn q6_gemv() {
         g.sync().unwrap();
         let us = t.elapsed().as_secs_f64() / 50.0 * 1e6;
         eprintln!("{name} {rows}x{k}: {us:.1} us, {:.0} GB/s ({:.0} G weights/s)", rows as f64 * k as f64 * 0.8203 / us / 1e3, (rows * k) as f64 / us / 1e3);
+        }
+        let plain = g.kernel("gemv_q6s8").unwrap();
+        let fused = g.kernel("gemv_q6s8_bf").unwrap();
+        g.launch(plain, ((rows as u32).div_ceil(64), 1, 1), 128, 0, &args).unwrap();
+        let unrounded: Vec<f32> = g.download(dy.ptr, rows).unwrap();
+        g.launch(fused, ((rows as u32).div_ceil(64), 1, 1), 128, 0, &args).unwrap();
+        let rounded: Vec<f32> = g.download(dy.ptr, rows).unwrap();
+        for (i, (&x, &y)) in unrounded.iter().zip(&rounded).enumerate() {
+            assert_eq!(y, half::bf16::from_f32(x).to_f32(), "BF16 epilogue at row {i}");
         }
     }
 }
@@ -114,7 +123,7 @@ fn q6_model_shapes() {
             g.launch(k1, ((rpg as u32).div_ceil(4), 1, 1), 128, 0, &[Arg::P(dl.ptr + (gi * rpg * k / 2) as u64), Arg::P(dv.ptr + (gi * k * 4) as u64), Arg::P(dy.ptr + (gi * rpg * 4) as u64), Arg::I(rpg as i32), Arg::I(k as i32), Arg::I(1), Arg::I(k as i32), Arg::I(rpg as i32), Arg::P(dh.ptr + (gi * rpg * k / 4) as u64), Arg::P(ds.ptr + (gi * rpg * k / 16) as u64), Arg::P(dd.ptr + (gi * rpg * k / 256 * 2) as u64)]).unwrap();
         });
         line += &format!("  q6p {us:6.1} ({:4.0})", bytes / us / 1e3);
-        for (name, prw) in [("gemv_q6g4", 4u32), ("gemv_q6g8", 8), ("gemv_q6s8", 16)] {
+        for (name, prw) in [("gemv_q6g4", 4u32), ("gemv_q6g8", 8), ("gemv_q6s8", 16), ("gemv_q6q16", 8)] {
             let kk = g.kernel(name).unwrap();
             let args = [Arg::P(dl.ptr), Arg::P(dv.ptr), Arg::P(dy.ptr), Arg::I(rows as i32), Arg::I(k as i32), Arg::I(1), Arg::I(k as i32), Arg::I(rows as i32), Arg::P(dh.ptr), Arg::P(ds.ptr), Arg::P(dd.ptr), Arg::I(rpg as i32), Arg::I(k as i32)];
             g.launch(kk, ((rows as u32).div_ceil(4 * prw), 1, 1), 128, 0, &args).unwrap();

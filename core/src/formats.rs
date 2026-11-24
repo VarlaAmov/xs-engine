@@ -76,6 +76,18 @@ pub fn dequant_row(t: GType, raw: &[u8], out: &mut [f32]) {
                 }
             }
         }
+        GType::Q2K => {
+            // ggml block_q2_K: scales[16], qs[64], d, dmin. Four bit planes
+            // in each 32-byte half encode 128 weights; each scale covers 16.
+            for (b, blk) in raw.chunks_exact(84).enumerate() {
+                let (d, dmin) = (f16_at(blk, 80), f16_at(blk, 82));
+                for e in 0..256 {
+                    let sc = blk[e / 16];
+                    let q = (blk[16 + (e / 128) * 32 + e % 32] >> (2 * ((e / 32) % 4))) & 3;
+                    out[b * 256 + e] = d * (sc & 15) as f32 * q as f32 - dmin * (sc >> 4) as f32;
+                }
+            }
+        }
         GType::Q3K => {
             for (b, blk) in raw.chunks_exact(110).enumerate() {
                 let (hm, qs, raw12) = (&blk[0..32], &blk[32..96], &blk[96..108]);
@@ -310,6 +322,29 @@ mod tests {
         assert_eq!(out[4], -0.5);
     }
 
+
+    #[test]
+    fn q2_k_matches_ggml_reference() {
+        // Golden hash from ggml dequantize_row_q2_K compiled independently with
+        // fp contraction disabled. Exercise all scale/min nibble combinations,
+        // bit planes, block boundaries and zero/negative block factors.
+        assert_eq!(GType::from_id(10).unwrap(), GType::Q2K);
+        assert_eq!(GType::Q2K.block(), (256, 84));
+        let ds = [0u16, 0x3000, 0xb400, 0x4000];
+        let ms = [0u16, 0x2c00, 0xb800, 0x3c00];
+        let mut raw = vec![0u8; 16 * 84];
+        for (b, blk) in raw.chunks_exact_mut(84).enumerate() {
+            for (j, sc) in blk[..16].iter_mut().enumerate() { *sc = ((b << 4) | j) as u8; }
+            for (i, q) in blk[16..80].iter_mut().enumerate() { *q = (i * 73 + b * 29) as u8; }
+            blk[80..82].copy_from_slice(&ds[b % 4].to_le_bytes());
+            blk[82..84].copy_from_slice(&ms[b / 4].to_le_bytes());
+        }
+        let mut out = vec![0.0; 4096];
+        dequant_row(GType::Q2K, &raw, &mut out);
+        let hash = out.iter().flat_map(|v| v.to_le_bytes())
+            .fold(0xcbf29ce484222325u64, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3));
+        assert_eq!(hash, 0xb29bd890a62304ae);
+    }
     #[test]
     fn iq2_xxs_layout() {
         // group 0 of block 0: grid 1 (0x080808080808082b, little-endian: weight 0 = 43, others 8), sign index 3 (ksigns 3: weights 0, 1

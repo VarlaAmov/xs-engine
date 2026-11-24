@@ -20,6 +20,8 @@
 //                           byte i bit 4 (h & 1) + s = NOT hmask bit (chunk h); then per 256-block the 12 ggml scale bytes,
 //                           then d f16. q = low | (nh ? 0xfc : 0) as int8 = the signed 3-bit value
 //   2008 Q8_0   (8.5 bpw)   qs [rows][k/64][q][16 B]: byte 4s + i = weight 16s + 4q + i; then d f16 [rows][k/32]
+//   2010 Q2_K   (2.625 bpw) codes [rows][k/256][q][4 chunks] u32 as Q3_K's low bits; then scales[16]
+//                           [rows][k/256], then paired f16 d, dmin [rows][k/256]. Lossless, 84 bytes per block.
 //   2016 IQ2_XXS (2.06 bpw) ggml's 8 bytes per 32-block unchanged, [rows][k/32] (u32 grid indices, u32 signs + scale);
 //                           then d f16 [rows][k/256]. Format and tables: ggml (iq2grid.cuh)
 //   2019 IQ1_S  (1.56 bpw)  [rows][k/256][48 B]: qs[32] (low index bytes), qh u16[8]; then d f16 [rows][k/256]
@@ -35,6 +37,7 @@
 #define RP_Q2 2042
 #define RP_T1 2143
 #define RP_Q3 2011
+#define RP_Q2K 2010
 #define RP_IQ2 2016
 #define RP_IQ2XS 2017
 #define RP_IQ3XXS 2018
@@ -310,6 +313,47 @@ __device__ __forceinline__ void tile_q3(const uint8_t *const (&m)[NM], int rows,
       acc[j][1] += fa[j] * dx1 * (float)is[1];
       acc[j][2] += fb[j] * dx0 * (float)is[2];
       acc[j][3] += fb[j] * dx1 * (float)is[3];
+    }
+  }
+}
+
+// Q2_K: each 16-weight group has independent 4-bit scale/minimum multipliers.
+// Two integer products keep d and dmin separate; codes * scale fit exactly in signed int8 (0..45).
+template <int NM>
+__device__ __forceinline__ void tile_q2k(const uint8_t *const (&m)[NM], int rows, int k, int ra, int rb, const XQ &x,
+                                         const Lane &L, float (&acc)[NM][4]) {
+  const int nb = k >> 8;
+  const size_t ps = (size_t)rows * nb * 64, pd = (size_t)rows * nb * 80;
+  for (int xb = L.k0; xb < nb; xb += KS) {
+    int4 X[4];
+    float dx0, dx1;
+    load_x(x, k, xb, L, X, dx0, dx1);
+#pragma unroll
+    for (int j = 0; j < NM; j++) {
+      const size_t ba = (size_t)ra * nb + xb, bb = (size_t)rb * nb + xb;
+      const int4 A = __ldg((const int4 *)(m[j] + (ba * 4 + L.q) * 16));
+      const int4 B = __ldg((const int4 *)(m[j] + (bb * 4 + L.q) * 16));
+      const int4 SA = __ldg((const int4 *)(m[j] + ps + ba * 16)), SB = __ldg((const int4 *)(m[j] + ps + bb * 16));
+      const unsigned da = __ldg((const unsigned *)(m[j] + pd + ba * 4)), db = __ldg((const unsigned *)(m[j] + pd + bb * 4));
+      int val[4] = {0, 0, 0, 0}, mins[4] = {0, 0, 0, 0};
+#pragma unroll
+      for (int h = 0; h < 4; h++) {
+#pragma unroll
+        for (int s = 0; s < 4; s++) {
+          const unsigned sa = ((unsigned)comp4(SA, h) >> (8 * s)) & 255, sb = ((unsigned)comp4(SB, h) >> (8 * s)) & 255;
+          const unsigned qa = ((unsigned)comp4(A, h) >> (2 * s)) & 0x03030303u, qb = ((unsigned)comp4(B, h) >> (2 * s)) & 0x03030303u;
+          int v[4], mn[4];
+          const int bx = comp4(X[h], s);
+          mma16(v, qa * (sa & 15), qb * (sb & 15), bx);
+          mma16(mn, (sa >> 4) * 0x01010101u, (sb >> 4) * 0x01010101u, bx);
+#pragma unroll
+          for (int z = 0; z < 4; z++) { val[z] += v[z]; mins[z] += mn[z]; }
+        }
+      }
+      acc[j][0] += (h2f(da, 0) * (float)val[0] - h2f(da, 1) * (float)mins[0]) * dx0;
+      acc[j][1] += (h2f(da, 0) * (float)val[1] - h2f(da, 1) * (float)mins[1]) * dx1;
+      acc[j][2] += (h2f(db, 0) * (float)val[2] - h2f(db, 1) * (float)mins[2]) * dx0;
+      acc[j][3] += (h2f(db, 0) * (float)val[3] - h2f(db, 1) * (float)mins[3]) * dx1;
     }
   }
 }
@@ -629,6 +673,7 @@ __device__ __forceinline__ void tile_dot(int ty, const uint8_t *const (&m)[NM], 
   if (ty == RP_Q2) tile_q2<NM>(m, rows, k, ra, rb, x, L, acc);
   else if (ty == RP_T1) tile_t1<NM>(m, rows, k, ra, rb, x, L, acc);
   else if (ty == RP_Q3) tile_q3<NM>(m, rows, k, ra, rb, x, L, acc);
+  else if (ty == RP_Q2K) tile_q2k<NM>(m, rows, k, ra, rb, x, L, acc);
   else if (ty == RP_Q8) tile_q8<NM>(m, rows, k, ra, rb, x, L, acc);
   else if (ty == RP_IQ2) tile_iq2<NM>(m, rows, k, ra, rb, x, L, acc, fill);
   else if (ty == RP_IQ3XXS) tile_iq3xxs<NM>(m, rows, k, ra, rb, x, L, acc, fill);
@@ -909,6 +954,23 @@ extern "C" __global__ void repack_expert(int ty, const uint8_t *src, uint8_t *ds
     c[1] = tail[1];
     c[2] = s[26];
     c[3] = s[27];
+  } else if (ty == 10) {  // Q2_K: permute code bytes, retain scales and both fp16 factors exactly
+    const size_t nb = k / 256;
+    if (bid >= rows * nb) return;
+    const uint8_t *s = src + bid * 84;
+    for (int q = 0; q < 4; q++)
+      for (int h = 0; h < 4; h++) {
+        unsigned codes = 0;
+        for (int g = 0; g < 4; g++)
+          for (int i = 0; i < 4; i++) {
+            const int e = 64 * h + 16 * g + 4 * q + i;
+            const unsigned code = (s[16 + (e / 128) * 32 + (e & 31)] >> (2 * ((e & 127) / 32))) & 3;
+            codes |= code << (8 * i + 2 * g);
+          }
+        *(unsigned *)(dst + (bid * 4 + q) * 16 + 4 * h) = codes;
+      }
+    for (int i = 0; i < 16; i++) dst[rows * nb * 64 + bid * 16 + i] = s[i];
+    for (int i = 0; i < 4; i++) dst[rows * nb * 80 + bid * 4 + i] = s[80 + i];
   } else if (ty == 11) {  // Q3_K
     size_t nb = k / 256;
     if (bid >= rows * nb) return;
@@ -988,6 +1050,12 @@ __device__ float rp_weight(int t, const uint8_t *w, int rows, int k, int r, int 
     else if (i < 2) { byte = w[rows * nb * 16 + ow * 4 + (b % 2) * 2 + i]; n = 4; }
     else { byte = cc[q >> 1]; n = 2 * (q & 1) + (i - 2); }
     return ld_h(cc + 2) * trit(byte, p3[n]);
+  } else if (t == RP_Q2K) {
+    const size_t nb = k / 256, b = (size_t)r * nb + c / 256;
+    const int e = c & 255, h = e >> 6;
+    const unsigned codes = *(const unsigned *)(w + (b * 4 + q) * 16 + 4 * h);
+    const int code = (codes >> (8 * i + 2 * g)) & 3, sc = w[rows * nb * 64 + b * 16 + (e >> 4)];
+    return ld_h(w + rows * nb * 80 + b * 4) * (float)((sc & 15) * code) - ld_h(w + rows * nb * 80 + b * 4 + 2) * (float)(sc >> 4);
   } else if (t == RP_Q3) {
     size_t nb = k / 256, b = c / 256;
     int e = c & 255, h = e >> 6;

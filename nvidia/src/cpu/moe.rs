@@ -833,6 +833,8 @@ mod tests {
             (Ptq1_0, Ptq1_0),
             (Q8_0, Q8_0),
             (Iq1S, Iq2Xxs),
+            (Iq1S, Q2K),
+            (Q2K, Iq1S),
             (Iq1M, Iq2Xxs),
             (Iq2Xs, Iq1M),
             (Iq2Xs, Iq3Xxs),
@@ -868,6 +870,31 @@ mod tests {
             h
         };
         f32_matvec(e.dn, e.down, e.inter(dim), &hq)
+    }
+
+    #[test]
+    fn sliced_iq_moe_matches_unsliced() {
+        let (dim, inter) = (512, 768);
+        let mut rng = Rng(0xd39a_17b2);
+        use GType::*;
+        let mats: Vec<Ex> = [(Iq1S, Iq2Xxs), (Iq1S, Q2K), (Q2K, Iq1S), (Iq2Xs, Iq2S), (Iq3Xxs, Iq2Xs)]
+            .into_iter().map(|(gu, dn)| Ex {
+                gu, dn,
+                gate: rand_rows(gu, inter, dim, &mut rng),
+                up: rand_rows(gu, inter, dim, &mut rng),
+                down: rand_rows(dn, dim, inter, &mut rng),
+            }).collect();
+        let ex: Vec<_> = mats.iter().map(Ex::w).collect();
+        let x: Vec<f32> = (0..dim).map(|_| rng.normal() * 0.1).collect();
+        let w = [0.15, 0.2, 0.0, 0.4, 0.25];
+        let mut moe = CpuMoe::new(Pool::new(&[0, 1], Duration::from_millis(1)));
+        let mut whole = vec![0f32; dim];
+        moe.forward_slice(&ex, dim, &x, &w, &mut whole, 0, inter);
+        let mut sliced = vec![0f32; dim];
+        for (a, b) in [(0, 256), (256, 512), (512, inter)] {
+            moe.forward_slice(&ex, dim, &x, &w, &mut sliced, a, b);
+        }
+        assert!(rel(&sliced, &whole) < 1e-6, "mixed IQ1_S/Q2_K slices changed the expert sum");
     }
 
     #[test]

@@ -4,12 +4,12 @@
 // PCIe (zero-copy, ~26 GB/s per link) while the CPU computes its slice from RAM. Partial outputs are summed by the
 // combine. Activations are int8 per 256 block exactly as quant_act / the CPU's QAct (d = amax / 127, round to
 // nearest even); h = bf16(silu(min(g, lim)) * clamp(u, -lim, lim) * w) as moe_gu_fast. One token (decode).
-// Formats: the four of DeepSeek XS's experts, ggml's layouts and tables (iq2grid.cuh): IQ2_XXS 16, IQ2_XS 17,
-// IQ2_S 22, IQ3_XXS 18.
+// Formats: ggml's layouts and tables (iq2grid.cuh): IQ2_XXS 16, IQ2_XS 17,
+// IQ2_S 22, IQ3_XXS 18, IQ1_S 19, Q2_K 10.
 
 #define XS_MAXK 6
 
-__device__ __forceinline__ int xs_bs(int ty) { return ty == 16 ? 66 : ty == 17 ? 74 : ty == 22 ? 82 : 98; }
+__device__ __forceinline__ constexpr int xs_bs(int ty) { return ty == 16 ? 66 : ty == 17 ? 74 : ty == 22 ? 82 : ty == 19 ? 50 : ty == 10 ? 84 : 98; }
 
 // 4 sign bits -> 4 bytes of 0xff / 0x00 (bits land on bytes 0..3 through distinct product bits)
 __device__ __forceinline__ unsigned xs_smask(unsigned s4) { return ((s4 * 0x00204081u) & 0x01010101u) * 0xffu; }
@@ -33,7 +33,8 @@ __device__ __forceinline__ void xs_tab_fill(int ty, XsTab t) {
   if (ty == 16) for (int i = threadIdx.x; i < 256; i += blockDim.x) t.g8[i] = iq2xxs_grid[i];
   else if (ty == 17) for (int i = threadIdx.x; i < 512; i += blockDim.x) t.g8[i] = iq2xs_grid[i];
   else if (ty == 22) for (int i = threadIdx.x; i < 1024; i += blockDim.x) t.g8[i] = iq2s_grid[i];
-  else for (int i = threadIdx.x; i < 256; i += blockDim.x) t.g4[i] = iq3xxs_grid[i];
+  else if (ty == 19) for (int i = threadIdx.x; i < 2048; i += blockDim.x) t.g4[i] = iq1s_grid4[i];
+  else if (ty == 18) for (int i = threadIdx.x; i < 256; i += blockDim.x) t.g4[i] = iq3xxs_grid[i];
 }
 
 // sub-block ib (32 weights) of the block at `b` (GGUF bytes, 2-byte aligned) against int8 x (32 bytes, 4-byte
@@ -72,6 +73,18 @@ __device__ __forceinline__ int xs_sub(int ty, const uint8_t *b, int ib, const in
       if (l < 2) s0 += v; else s1 += v;
     }
     return s0 * (int)(2 * (sc & 15) + 1) + s1 * (int)(2 * (sc >> 4) + 1);
+  } else if (ty == 19) {  // IQ1_S: ternary grid plus +/-1/8, as exact int8 values 8*g +/-1
+    const unsigned qh = u16(34 + 2 * ib), bias = (qh & 0x8000) ? 0x77777777u : 0x79797979u;
+    int s = 0;
+#pragma unroll
+    for (int l = 0; l < 4; l++) {
+      const unsigned idx = b[2 + 4 * ib + l] | (((qh >> (3 * l)) & 7) << 8), grid = t.g4[idx];
+      const unsigned lo = ((((grid & 0x0f0f0f0fu) << 3) + bias) ^ 0x80808080u);
+      const unsigned hi = (((((grid >> 4) & 0x0f0f0f0fu) << 3) + bias) ^ 0x80808080u);
+      s = __dp4a((int)lo, x[2 * l], s);
+      s = __dp4a((int)hi, x[2 * l + 1], s);
+    }
+    return s * (int)(2 * ((qh >> 12) & 7) + 1);
   } else {  // IQ3_XXS: 8 grid bytes (u32 entries of 4 weights) at 2 + 8 ib, u32 signs + scale at 66 + 4 ib
     const unsigned sg = u16(66 + 4 * ib) | u16(68 + 4 * ib) << 16;
     int s = 0;
@@ -86,6 +99,23 @@ __device__ __forceinline__ int xs_sub(int ty, const uint8_t *b, int ib, const in
 
 __device__ __forceinline__ float xs_dfac(int ty) { return ty == 18 ? 0.25f : 0.125f; }
 __device__ __forceinline__ float xs_d(const uint8_t *b) { return __half2float(__ushort_as_half(*(const unsigned short *)b)); }
+
+// Q2_K has separate scale and minimum factors; keep both integer sums exact before applying fp16 factors.
+__device__ __forceinline__ float xs_block_dot(int ty, const uint8_t *b, int ib, const int *x, const XsTab &t, float dx) {
+  if (ty == 10) {
+    const uint8_t *q = b + 16 + (ib >> 2) * 32;
+    int val = 0, mins = 0;
+#pragma unroll
+    for (int l = 0; l < 8; l++) {
+      const unsigned codes = (unsigned)*(const unsigned short *)(q + 4 * l) | (unsigned)*(const unsigned short *)(q + 4 * l + 2) << 16;
+      const unsigned v = (codes >> (2 * (ib & 3))) & 0x03030303u, sc = b[2 * ib + (l >> 2)];
+      val = __dp4a((int)(v * (sc & 15)), x[l], val);
+      mins = __dp4a((int)((sc >> 4) * 0x01010101u), x[l], mins);
+    }
+    return (xs_d(b + 80) * (float)val - xs_d(b + 82) * (float)mins) * dx;
+  }
+  return (float)xs_sub(ty, b, ib, x, t) * (xs_d(b) * (dx * xs_dfac(ty)));
+}
 
 // x [k] -> xq [k] int8 (natural order), xd [k / 256]. grid k / 256, block 256
 extern "C" __global__ void xs_pull_qx(const float *__restrict__ x, int8_t *__restrict__ xq, float *__restrict__ xd, float *__restrict__ xc) {
@@ -128,7 +158,7 @@ template <int TY>
 __device__ __forceinline__ void xs_pull_gu_t(const int *__restrict__ sel, const float *__restrict__ wts, const uint8_t *__restrict__ miss,
                                              const unsigned long long *__restrict__ ptrs, int layer, int E, int K, const int8_t *__restrict__ xq,
                                              const float *__restrict__ xd, float *__restrict__ h, int c0, int c1, int inter, float lim) {
-  constexpr int BS = TY == 16 ? 66 : TY == 17 ? 74 : TY == 22 ? 82 : 98, RB = 20 * BS;  // row bytes: a multiple of 8
+  constexpr int BS = xs_bs(TY), RB = 20 * BS;  // row bytes: a multiple of 8
   __shared__ __align__(16) unsigned long long g8[1024];
   __shared__ __align__(16) uint8_t ks[128];
   __shared__ __align__(16) int8_t sx[5120];
@@ -147,7 +177,6 @@ __device__ __forceinline__ void xs_pull_gu_t(const int *__restrict__ sel, const 
   __syncthreads();
   const int lane = threadIdx.x & 31, w = threadIdx.x >> 5, rows = c1 - c0;
   const int nw = gridDim.x * XS_PULL_WARPS;
-  const float df = xs_dfac(TY);
   for (int it = blockIdx.x * XS_PULL_WARPS + w; it < n * rows; it += nw) {
     const int pj = it / rows, r = c0 + it % rows, j = picks[pj];
     const size_t pe = ((size_t)layer * E + sel[j]) * 3;
@@ -166,9 +195,8 @@ __device__ __forceinline__ void xs_pull_gu_t(const int *__restrict__ sel, const 
       const int s = lane + 32 * i, b = s >> 3, ib = s & 7;
       const uint8_t *gb = (const uint8_t *)rows16[w][0] + shift[0] + b * BS, *ub = (const uint8_t *)rows16[w][1] + shift[1] + b * BS;
       const int *xs = (const int *)(sx + 32 * s);
-      const float sc = sxd[b] * df;
-      ga += (float)xs_sub(TY, gb, ib, xs, t) * (xs_d(gb) * sc);
-      ua += (float)xs_sub(TY, ub, ib, xs, t) * (xs_d(ub) * sc);
+      ga += xs_block_dot(TY, gb, ib, xs, t, sxd[b]);
+      ua += xs_block_dot(TY, ub, ib, xs, t, sxd[b]);
     }
     const float g = warp_sum(ga), u = warp_sum(ua);
     if (lane == 0) {
@@ -186,6 +214,8 @@ extern "C" __global__ void __launch_bounds__(256) xs_pull_gu16(XS_GU_ARGS) { xs_
 extern "C" __global__ void __launch_bounds__(256) xs_pull_gu17(XS_GU_ARGS) { xs_pull_gu_t<17>(sel, wts, miss, ptrs, layer, E, K, xq, xd, h, c0, c1, inter, lim); }
 extern "C" __global__ void __launch_bounds__(256) xs_pull_gu22(XS_GU_ARGS) { xs_pull_gu_t<22>(sel, wts, miss, ptrs, layer, E, K, xq, xd, h, c0, c1, inter, lim); }
 extern "C" __global__ void __launch_bounds__(256) xs_pull_gu18(XS_GU_ARGS) { xs_pull_gu_t<18>(sel, wts, miss, ptrs, layer, E, K, xq, xd, h, c0, c1, inter, lim); }
+extern "C" __global__ void __launch_bounds__(256) xs_pull_gu19(XS_GU_ARGS) { xs_pull_gu_t<19>(sel, wts, miss, ptrs, layer, E, K, xq, xd, h, c0, c1, inter, lim); }
+extern "C" __global__ void __launch_bounds__(256) xs_pull_gu10(XS_GU_ARGS) { xs_pull_gu_t<10>(sel, wts, miss, ptrs, layer, E, K, xq, xd, h, c0, c1, inter, lim); }
 
 // out [dim] = sum over missed picks of down[:, c0..c1) . h[j][c0..c1) (int8 h per 256 block), zeros when nothing is
 // missed. grid SMs, block 256; a warp takes 4 rows per step (their slices' loads in flight together).
@@ -194,7 +224,7 @@ template <int TY>
 __device__ __forceinline__ void xs_pull_down_t(const int *__restrict__ sel, const uint8_t *__restrict__ miss, const unsigned long long *__restrict__ ptrs,
                                                int layer, int E, int K, const float *__restrict__ h, float *__restrict__ out, int c0, int c1,
                                                int inter, int dim) {
-  constexpr int BS = TY == 16 ? 66 : TY == 17 ? 74 : TY == 22 ? 82 : 98;
+  constexpr int BS = xs_bs(TY);
   __shared__ __align__(16) unsigned long long g8[1024];
   __shared__ __align__(16) uint8_t ks[128];
   __shared__ __align__(16) int8_t hq[XS_MAXK][1536];
@@ -231,7 +261,6 @@ __device__ __forceinline__ void xs_pull_down_t(const int *__restrict__ sel, cons
     }
   __syncthreads();
   const int rbd = inter / 256 * BS, off = (c0 / 256) * BS, sb = nb * BS;  // slice bytes per row: even, 2-byte aligned
-  const float df = xs_dfac(TY);
   const int nsub = nb * 8;
   for (int o0 = (blockIdx.x * XS_PULL_WARPS + w) * 4; o0 < dim; o0 += nw * 4) {
     float tot[4] = {0.f, 0.f, 0.f, 0.f};
@@ -255,11 +284,10 @@ __device__ __forceinline__ void xs_pull_down_t(const int *__restrict__ sel, cons
         if (sbk >= nsub) break;
         const int b = sbk >> 3, ib = sbk & 7;
         const int *hx = (const int *)(hq[pj] + 32 * sbk);
-        const float hs = hd[pj][b] * df;
 #pragma unroll
         for (int q = 0; q < 4; q++) {
           const uint8_t *blk = (const uint8_t *)stage[w][q] + shift[q] + b * BS;
-          v[q] += (float)xs_sub(TY, blk, ib, hx, t) * (xs_d(blk) * hs);
+          v[q] += xs_block_dot(TY, blk, ib, hx, t, hd[pj][b]);
         }
       }
 #pragma unroll
@@ -277,6 +305,8 @@ extern "C" __global__ void __launch_bounds__(256) xs_pull_down16(XS_DN_ARGS) { x
 extern "C" __global__ void __launch_bounds__(256) xs_pull_down17(XS_DN_ARGS) { xs_pull_down_t<17>(sel, miss, ptrs, layer, E, K, h, out, c0, c1, inter, dim); }
 extern "C" __global__ void __launch_bounds__(256) xs_pull_down22(XS_DN_ARGS) { xs_pull_down_t<22>(sel, miss, ptrs, layer, E, K, h, out, c0, c1, inter, dim); }
 extern "C" __global__ void __launch_bounds__(256) xs_pull_down18(XS_DN_ARGS) { xs_pull_down_t<18>(sel, miss, ptrs, layer, E, K, h, out, c0, c1, inter, dim); }
+extern "C" __global__ void __launch_bounds__(256) xs_pull_down19(XS_DN_ARGS) { xs_pull_down_t<19>(sel, miss, ptrs, layer, E, K, h, out, c0, c1, inter, dim); }
+extern "C" __global__ void __launch_bounds__(256) xs_pull_down10(XS_DN_ARGS) { xs_pull_down_t<10>(sel, miss, ptrs, layer, E, K, h, out, c0, c1, inter, dim); }
 
 // y += x, n floats. grid ceil(n / 256), block 256
 extern "C" __global__ void xs_add(float *__restrict__ y, const float *__restrict__ x, int n) {

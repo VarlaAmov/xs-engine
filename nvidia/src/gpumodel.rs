@@ -293,9 +293,9 @@ struct Aux {
 /// intermediate dimension, the miss map and arena addresses it reads, its scratch and the fork / join events.
 struct TriGpu {
     k_qx: Kernel,
-    /// per expert format (xs_fmt): IQ2_XXS, IQ2_XS, IQ2_S, IQ3_XXS
-    k_gu: [Kernel; 4],
-    k_down: [Kernel; 4],
+    /// per expert format: IQ2_XXS, IQ2_XS, IQ2_S, IQ3_XXS, IQ1_S, Q2_K
+    k_gu: [Kernel; 6],
+    k_down: [Kernel; 6],
     k_add: Kernel,
     /// CTAs of each pull kernel (one per SM at most): XS_PULL_SMS_MAIN / XS_PULL_SMS_AUX, default every SM
     ctas: std::cell::Cell<u32>,
@@ -376,7 +376,7 @@ impl TriGpu {
                 }
             }
         }
-        let k = |base: &str| -> Result<[Kernel; 4]> { Ok([g.kernel(&format!("{base}16"))?, g.kernel(&format!("{base}17"))?, g.kernel(&format!("{base}22"))?, g.kernel(&format!("{base}18"))?]) };
+        let k = |base: &str| -> Result<[Kernel; 6]> { Ok([g.kernel(&format!("{base}16"))?, g.kernel(&format!("{base}17"))?, g.kernel(&format!("{base}22"))?, g.kernel(&format!("{base}18"))?, g.kernel(&format!("{base}19"))?, g.kernel(&format!("{base}10"))?]) };
         let pf = match gate {
             Some((gates, own)) => {
                 let r: usize = std::env::var("XS_PREFETCH").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
@@ -439,7 +439,7 @@ impl TriGpu {
     #[allow(clippy::too_many_arguments)]
     fn enqueue(&self, g: &Gpu, c: &crate::model::Config, li: usize, ty: (i32, i32), sel: u64, wts: u64, x: u64, next: Option<(usize, (i32, i32))>) -> Result<()> {
         let (dim, inter, e, k) = (c.dim as i32, c.inter as i32, c.n_experts as i32, c.top_k as i32);
-        let fmt = |t: i32| match t { 16 => 0, 17 => 1, 22 => 2, _ => 3 };
+        let fmt = |t: i32| match t { 16 => 0, 17 => 1, 22 => 2, 18 => 3, 19 => 4, 10 => 5, _ => unreachable!("unsupported pull format {t}") };
         g.pull_after_main(self.fork)?;
         g.launch_pull(self.k_qx, ((dim / 256) as u32, 1, 1), 256, 0, &[Arg::P(x), Arg::P(self.xq.ptr), Arg::P(self.xd.ptr), Arg::P(self.pf.as_ref().map_or(0, |p| p.xc.ptr))])?;
         g.launch_pull(
@@ -461,7 +461,7 @@ impl TriGpu {
             g.record_pull(self.join)?;
         }
         let (Some(pf), Some((nl, nty))) = (self.pf.as_ref(), next) else { return Ok(()) };
-        let bs = |t: i32| match t { 16 => 66, 17 => 74, 22 => 82, _ => 98 } as i32;
+        let bs = |t: i32| match t { 16 => 66, 17 => 74, 22 => 82, 18 => 98, 19 => 50, 10 => 84, _ => unreachable!("unsupported pull format {t}") } as i32;
         let (rb, rbd) = (20 * bs(nty.0), c.inter as i32 / 256 * bs(nty.1));
         let (off, sb) = (self.c0 as i32 / 256 * bs(nty.1), (self.c1 - self.c0) as i32 / 256 * bs(nty.1));
         let (gw, gb) = pf.gate[nl];
@@ -540,7 +540,7 @@ pub struct Placement {
 pub const KERNELS: &[&str] = &[
     "gemv_q8_0", "gemv_f16", "gemv_f32", "rmsnorm", "round_bf16", "rope", "fake_fp8", "fake_fp4", "hc_mixes", "hc_pre",
     "hc_post", "sparse_attn", "sparse_attn_tile", "sparse_attn_merge", "store_bf16", "indexer_score", "compress_pool", "router_topk", "swiglu", "add_inplace",
-    "engram_gate", "scale_bf16", "gemv_fp8b32", "gemv_fp8b32_o", "gemv_bf16", "fake_fp8_copy", "gemv_q2_0", "gemv_ptq1_0", "gemv_q3_k", "publish_route", "combine_experts", "spin_wait", "rope_pos", "compress_pairs", "gather_f16", "swiglu_rows_f16", "scatter_add", "engram_gate_t", "dequant_f16", "dequant_f16_iq8", "dequant_t16_f16", "t16_pre", "t16_post", "to_f16", "ring_scatter", "pack_f16", "gemv_q8r", "gemv_q8r4", "hc_dots", "hc_dots_t", "hc_finish", "hc_finish_w", "gemv_q8g", "hc_pre_mb", "hc_post_mb", "to_bf16", "gemv_q8r_sk", "gemv_f16_sk", "gemv_bf16_sk", "gemv_f32_sk", "hc_part", "hc_reduce", "gemv_q6p", "dequant_q6p_f16", "gemv_q5p", "dequant_q5p_f16", "gemv_q6g4", "gemv_q6g8", "gemv_q6s8", "gemv_q5p4",
+    "engram_gate", "scale_bf16", "gemv_fp8b32", "gemv_fp8b32_o", "gemv_bf16", "fake_fp8_copy", "gemv_q2_0", "gemv_ptq1_0", "gemv_q3_k", "gemv_q2_k", "publish_route", "combine_experts", "spin_wait", "rope_pos", "compress_pairs", "gather_f16", "swiglu_rows_f16", "scatter_add", "engram_gate_t", "dequant_f16", "dequant_f16_iq8", "dequant_t16_f16", "t16_pre", "t16_post", "to_f16", "ring_scatter", "pack_f16", "gemv_q8r", "gemv_q8r4", "hc_dots", "hc_dots_t", "hc_finish", "hc_finish_w", "gemv_q8g", "hc_pre_mb", "hc_post_mb", "to_bf16", "gemv_q8r_sk", "gemv_f16_sk", "gemv_bf16_sk", "gemv_f32_sk", "hc_part", "hc_reduce", "gemv_q6p", "dequant_q6p_f16", "gemv_q5p", "dequant_q5p_f16", "gemv_q6g4", "gemv_q6g8", "gemv_q6s8", "gemv_q6s8_bf", "gemv_q6q16", "gemv_q5p4",
     "cache_pack_f32", "cache_unpack", "cache_pack_bf16", "fwht_rows_f16", "hc_reduce_finish", "kv_norm_rope_store", "add_noise_rows", "hc_add_post", "hc_pre_norm", "router_publish", "gemv_q8r1", "gemv_bf16_sk1", "gemv_f16_sk1", "gemv_q8r_sk1", "combine_post", "gemv_q8g_bf", "gemv_q8r_gu", "sparse_attn_merge_rf", "gemv_q8r1_rope", "gemv_q8r1_post", "vit_rmsnorm", "vit_bias_add", "vit_rope_split", "vit_softmax", "vit_heads_merge", "vit_swiglu", "vit_unfold3", "vit_gelu_bias", "vit_to_bf16",
     "xs_q5_32x4", "xs_q5_16x4", "xs_q5_8x4", "xs_q5_8x2", "xs_q5_gu", "xs_idx_score1", "xs_idx_score2",
 ];
@@ -1040,7 +1040,7 @@ impl<'m> GpuModel<'m> {
         let ty: Vec<(i32, i32)> = (0..c.n_layers)
             .map(|l| {
                 let x = &self.m.layers[l].experts[0];
-                let ok = |t: GType| matches!(t, GType::Iq2Xxs | GType::Iq2Xs | GType::Iq2S | GType::Iq3Xxs);
+                let ok = |t: GType| matches!(t, GType::Iq2Xxs | GType::Iq2Xs | GType::Iq2S | GType::Iq3Xxs | GType::Iq1S | GType::Q2K);
                 let same = self.m.layers[l].experts.iter().all(|y| y.gate.ty == x.gate.ty && y.up.ty == x.gate.ty && y.down.ty == x.down.ty);
                 if ok(x.gate.ty) && ok(x.down.ty) && same && !c.expert_rot[l] { (x.gate.ty as u32 as i32, x.down.ty as u32 as i32) } else { (0, 0) }
             })
@@ -1698,8 +1698,11 @@ impl<'m> GpuModel<'m> {
         }
         // 4 rows per warp once there are enough rows to fill the GPU (fewer blocks hurt small matrices)
         let r4 = if kn == "gemv_q6p" { n >= 512 } else { n >= Self::PLANES_R4_MIN };
+        let q16 = kn == "gemv_q6p" && n >= 4096 && k > 4096 && (k / 32) % 16 == 0;
         let (kn, rpb) = if kn == "gemv_q6p" && Self::q6_s8(n, k) {
             ("gemv_q6s8", 64)
+        } else if q16 {
+            ("gemv_q6q16", 32)
         } else if r4 {
             (if kn == "gemv_q6p" { "gemv_q6g4" } else { "gemv_q5p4" }, 16)
         } else {
@@ -1731,6 +1734,7 @@ impl<'m> GpuModel<'m> {
             GType::Q2_0 => "gemv_q2_0",
             GType::Ptq1_0 => "gemv_ptq1_0",
             GType::Q3K => "gemv_q3_k",
+            GType::Q2K => "gemv_q2_k",
             t => bail!("no GPU gemv for {t:?}"),
         };
         let (wp, sp, _) = w.ptrs(r0);
@@ -1993,18 +1997,20 @@ impl<'m> GpuModel<'m> {
         let gsz = nh * hd / c.o_groups;
         // wo_a's bf16 rounding inside the GEMV (gemv_q8g_bf) when it is the Q8_0 one, or xs_q5_16x4's epilogue
         let xs_oa = self.xs_dense && l.o_a.ty == GType::Q5K && l.o_a.q6.is_some() && (gsz / 32) % 16 == 0;
-        let rounded = (l.o_a.q8r && self.fuse2) || xs_oa;
+        let q6_oa = l.o_a.q6.is_some() && l.o_a.ty != GType::Q5K && c.o_lora % 16 == 0;
+        let q6_oa_s8 = q6_oa && Self::q6_s8(c.o_groups * c.o_lora, gsz);
+        let rounded = (l.o_a.q8r && self.fuse2) || xs_oa || (self.fuse2 && q6_oa_s8);
         if xs_oa {
             // xs-engine: every group in one launch (group gi's rows read o's slice gi), bf16 rounding in the epilogue
             self.xs_gemv_q5(&l.o_a, 0, c.o_groups * c.o_lora, self.o.ptr, self.r.ptr, c.o_lora, gsz, true, "xs_q5_16x4", 64)?;
         } else if l.o_a.q8r {
             let (wp, sp, _) = l.o_a.ptrs(0);
             self.g.launch(self.k[if rounded { "gemv_q8g_bf" } else { "gemv_q8g" }], (((c.o_groups * c.o_lora) as u32).div_ceil(4), 1, 1), 128, 0, &[Arg::P(wp), Arg::P(self.o.ptr), Arg::P(self.r.ptr), Arg::I((c.o_groups * c.o_lora) as i32), Arg::I(gsz as i32), Arg::I(c.o_lora as i32), Arg::I(gsz as i32), Arg::P(sp)])?;
-        } else if l.o_a.q6.is_some() && l.o_a.ty != GType::Q5K && c.o_lora % 16 == 0 {
+        } else if q6_oa {
             // 6-bit planes: every group in one launch (group gi's rows read o's slice gi)
             let ([lo, hi, sc, d], _, _) = l.o_a.planes(0);
             let rows = c.o_groups * c.o_lora;
-            let (kn, rpb) = if Self::q6_s8(rows, gsz) { ("gemv_q6s8", 64) } else { ("gemv_q6g4", 16) };
+            let (kn, rpb) = if q6_oa_s8 { (if rounded { "gemv_q6s8_bf" } else { "gemv_q6s8" }, 64) } else { ("gemv_q6g4", 16) };
             self.g.launch(
                 self.k[kn],
                 ((rows as u32).div_ceil(rpb), 1, 1),

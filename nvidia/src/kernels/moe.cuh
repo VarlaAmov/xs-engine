@@ -48,6 +48,13 @@ __device__ __forceinline__ float row_dot_lane(int t, const uint8_t *row, const f
         for (int n = 0; n < 4; n++) s += trit(blk[24 + h], p3[n]) * xb[120 + h + 2 * n];
       acc += d * s;
     }
+  } else if (t == 10) {  // Q2_K, lanes over 16-weight sub-blocks
+    for (int sb = lane; sb < k / 16; sb += 32) {
+      const int first = (sb & 15) * 16;
+      const uint8_t *blk = row + (sb >> 4) * 84;
+#pragma unroll
+      for (int i = 0; i < 16; i++) acc += raw_q2k_value(blk, first + i) * x[sb * 16 + i];
+    }
   } else if (t == 11) {  // Q3_K, lanes over 16-weight sub-blocks
     int nb = k / 256;
     for (int sb = lane; sb < nb * 16; sb += 32) {
@@ -85,7 +92,7 @@ __device__ __forceinline__ float row_dot_lane(int t, const uint8_t *row, const f
 }
 
 __device__ __forceinline__ int row_bytes(int t, int k) {
-  return t == 42 ? k / 64 * 18 : t == 143 ? k / 128 * 28 : t == 11 ? k / 256 * 110 : k / 32 * 34;
+  return t == 42 ? k / 64 * 18 : t == 143 ? k / 128 * 28 : t == 11 ? k / 256 * 110 : t == 10 ? k / 256 * 84 : k / 32 * 34;
 }
 
 // h[j][r] = bf16(silu(min(gate_j[r].x, lim)) * clamp(up_j[r].x, -lim, lim) * w_j) for the picks j resident here.
