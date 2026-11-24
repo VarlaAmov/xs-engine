@@ -10,8 +10,7 @@
 use anyhow::{Context, Result, bail, ensure};
 use std::alloc::{Layout, alloc_zeroed, dealloc};
 use std::fs::{File, OpenOptions};
-use std::os::unix::ffi::OsStrExt;
-use std::os::unix::fs::{FileExt, OpenOptionsExt, PermissionsExt};
+use crate::osio;
 use std::path::{Path, PathBuf};
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -47,7 +46,7 @@ pub fn fnv64(mut h: u64, bytes: &[u8]) -> u64 {
 pub fn file_identity(path: &Path) -> Result<u64> {
     let m = std::fs::metadata(path).with_context(|| format!("{}", path.display()))?;
     let t = m.modified()?.duration_since(UNIX_EPOCH).unwrap_or_default();
-    let mut h = fnv64(FNV0, path.as_os_str().as_bytes());
+    let mut h = fnv64(FNV0, &osio::path_bytes(path));
     h = fnv64(h, &m.len().to_le_bytes());
     h = fnv64(h, &t.as_secs().to_le_bytes());
     Ok(fnv64(h, &t.subsec_nanos().to_le_bytes()))
@@ -216,9 +215,12 @@ impl DiskStore {
     /// Create the directory (owner-only: the files hold whole conversations) and check whether O_DIRECT works there.
     pub fn open(dir: &Path, fp: Fingerprint, reserve_bytes: u64) -> Result<Self> {
         std::fs::create_dir_all(dir).with_context(|| format!("session dir {}", dir.display()))?;
-        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+        osio::restrict_dir(dir)?;
         let probe = dir.join(format!("{TMP}probe-{}", std::process::id()));
-        let direct = OpenOptions::new().write(true).create(true).truncate(true).custom_flags(libc::O_DIRECT).open(&probe).is_ok();
+        let mut probe_options = OpenOptions::new();
+        probe_options.write(true).create(true).truncate(true);
+        osio::set_direct(&mut probe_options);
+        let direct = probe_options.open(&probe).is_ok();
         let _ = std::fs::remove_file(&probe);
         if !direct {
             tracing::warn!(dir = %dir.display(), "session dir: no O_DIRECT here, buffered I/O with page-cache drop");
@@ -232,9 +234,7 @@ impl DiskStore {
 
     /// Bytes the filesystem still gives this user.
     pub fn free_bytes(&self) -> Option<u64> {
-        let c = std::ffi::CString::new(self.dir.as_os_str().as_bytes()).ok()?;
-        let mut st: libc::statvfs = unsafe { std::mem::zeroed() };
-        (unsafe { libc::statvfs(c.as_ptr(), &mut st) } == 0).then(|| st.f_bavail as u64 * st.f_frsize as u64)
+        osio::free_bytes(&self.dir)
     }
 
     /// Every loadable file. Temporary leftovers and files that are damaged or belong to other weights or another
@@ -265,16 +265,7 @@ impl DiskStore {
     }
 
     fn open_file(&self, path: &Path, write: bool) -> Result<File> {
-        let mut o = OpenOptions::new();
-        if write {
-            o.write(true).create_new(true).mode(0o600);
-        } else {
-            o.read(true);
-        }
-        if self.direct {
-            o.custom_flags(libc::O_DIRECT);
-        }
-        o.open(path).with_context(|| format!("{}", path.display()))
+        osio::open_options(write, self.direct).open(path).with_context(|| format!("{}", path.display()))
     }
 
     /// Start a file: the key and metadata go out now, the state through `Writer::write`, the header at `finish`.
@@ -312,7 +303,7 @@ impl DiskStore {
         region.as_mut_slice()[..key_bytes.len()].copy_from_slice(&key_bytes);
         region.as_mut_slice()[kp..kp + meta.len()].copy_from_slice(meta);
         if kp + meta.len() > 0 {
-            w.f.write_all_at(&region.as_slice()[..kp + pad(meta.len())], ALIGN as u64)?;
+            osio::write_all_at(&w.f, &region.as_slice()[..kp + pad(meta.len())], ALIGN as u64)?;
         }
         Ok(w)
     }
@@ -321,7 +312,7 @@ impl DiskStore {
     pub fn open_reader(&self, path: &Path) -> Result<Reader> {
         let f = self.open_file(path, false)?;
         let mut page = AlignedBuf::new(ALIGN);
-        f.read_exact_at(page.as_mut_slice(), 0).context("short header")?;
+        osio::read_exact_at(&f, page.as_mut_slice(), 0).context("short header")?;
         let h = Header::decode(page.as_slice())?;
         ensure!(h.fp == self.fp, "written for other weights or another state layout");
         let len = f.metadata()?.len();
@@ -330,7 +321,7 @@ impl DiskStore {
         let ml = h.meta_len as usize;
         let mut region = AlignedBuf::new(pad(kb) + pad(ml));
         if kb + ml > 0 {
-            f.read_exact_at(&mut region.as_mut_slice()[..pad(kb) + pad(ml)], ALIGN as u64)?;
+            osio::read_exact_at(&f, &mut region.as_mut_slice()[..pad(kb) + pad(ml)], ALIGN as u64)?;
         }
         let r = region.as_slice();
         ensure!(crc32fast::hash(&r[..kb]) == h.key_crc, "damaged key");
@@ -386,7 +377,7 @@ impl Writer {
         if self.fill == 0 && (data.as_ptr() as usize) % ALIGN == 0 {
             let whole = data.len() / ALIGN * ALIGN;
             if whole > 0 {
-                self.f.write_all_at(&data[..whole], self.off)?;
+                osio::write_all_at(&self.f, &data[..whole], self.off)?;
                 self.off += whole as u64;
                 data = &data[whole..];
             }
@@ -411,7 +402,7 @@ impl Writer {
         let n = pad(self.fill);
         let b = self.bounce.as_mut().unwrap();
         b.as_mut_slice()[self.fill..n].fill(0);
-        self.f.write_all_at(&b.as_slice()[..n], self.off)?;
+        osio::write_all_at(&self.f, &b.as_slice()[..n], self.off)?;
         self.off += n as u64;
         self.fill = 0;
         Ok(())
@@ -422,12 +413,10 @@ impl Writer {
         ensure!(self.written == self.header.data_len as usize, "state: {} of {} bytes written", self.written, self.header.data_len);
         self.flush_bounce()?;
         self.header.data_crc = std::mem::take(&mut self.crc).finalize();
-        self.f.write_all_at(self.header.encode().as_slice(), 0)?;
+        osio::write_all_at(&self.f, self.header.encode().as_slice(), 0)?;
         self.f.sync_all()?;
         if !self.direct {
-            unsafe {
-                libc::posix_fadvise(std::os::fd::AsRawFd::as_raw_fd(&self.f), 0, 0, libc::POSIX_FADV_DONTNEED);
-            }
+            osio::drop_page_cache(&self.f);
         }
         std::fs::rename(&self.tmp, &self.path)?;
         if let Ok(d) = File::open(&self.dir) {
@@ -469,7 +458,7 @@ impl Reader {
             ensure!((buf.as_ptr() as usize) % ALIGN == 0 && buf.len() % ALIGN == 0 && !buf.is_empty(), "unaligned read buffer");
         }
         let n = buf.len().min(pad(self.remaining));
-        self.f.read_exact_at(&mut buf[..n], self.off)?;
+        osio::read_exact_at(&self.f, &mut buf[..n], self.off)?;
         self.off += n as u64;
         let got = n.min(self.remaining);
         self.crc.update(&buf[..got]);
@@ -482,9 +471,7 @@ impl Reader {
         ensure!(self.remaining == 0, "state not read to the end");
         ensure!(self.crc.finalize() == self.data_crc, "damaged state (CRC mismatch)");
         if !self.direct {
-            unsafe {
-                libc::posix_fadvise(std::os::fd::AsRawFd::as_raw_fd(&self.f), 0, 0, libc::POSIX_FADV_DONTNEED);
-            }
+            osio::drop_page_cache(&self.f);
         }
         Ok(())
     }

@@ -9,6 +9,7 @@ pub mod gguf;
 pub mod iqgrid;
 pub mod model;
 pub mod numerics;
+pub mod osio;
 pub mod safetensors;
 pub mod server;
 pub mod t16;

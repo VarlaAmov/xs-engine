@@ -11,10 +11,6 @@ const PER: usize = 24;
 const DIM: usize = 256;
 const ROWS: usize = 4096;
 
-unsafe extern "C" {
-    fn posix_fadvise(fd: i32, offset: i64, len: i64, advice: i32) -> i32;
-}
-
 fn value(l: usize, r: usize, j: usize) -> f32 {
     (l * 5_000_000 + r * 1000 + j) as f32
 }
@@ -36,7 +32,8 @@ impl MapRows {
             }
         }
         std::fs::write(&path, &bytes).unwrap();
-        let file = std::fs::File::open(&path).unwrap();
+        // writable: Windows' FlushFileBuffers behind sync_all refuses a read-only handle
+        let file = std::fs::OpenOptions::new().read(true).write(true).open(&path).unwrap();
         file.sync_all().unwrap();
         let map = unsafe { memmap2::Mmap::map(&file).unwrap() };
         MapRows { map, file }
@@ -44,8 +41,7 @@ impl MapRows {
 
     /// drop the file's pages from the page cache (they are clean after sync_all)
     fn evict(&self) {
-        use std::os::fd::AsRawFd;
-        unsafe { posix_fadvise(self.file.as_raw_fd(), 0, 0, 4) };
+        dsx::osio::drop_page_cache(&self.file);
     }
 }
 
@@ -113,7 +109,10 @@ fn rows_land_in_place_every_token() {
         if t == 0 {
             let (cold, _) = eg.stats(1);
             println!("first token after evicting the file: {cold} of {} rows not cached", LAYERS * PER);
-            assert!(cold > 0, "evicted rows counted as cached");
+            // the miss count needs mincore and a page-cache eviction, which Windows has no counterpart for
+            if cfg!(unix) {
+                assert!(cold > 0, "evicted rows counted as cached");
+            }
         }
         if t % 500 == 499 {
             // workers parked: the next publish has to wake them

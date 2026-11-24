@@ -10,9 +10,37 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering::*};
 use std::time::{Duration, Instant};
 
+#[cfg(unix)]
 unsafe extern "C" {
     fn madvise(addr: *mut std::ffi::c_void, len: usize, advice: i32) -> i32;
     fn mincore(addr: *mut std::ffi::c_void, len: usize, vec: *mut u8) -> i32;
+}
+
+#[cfg(windows)]
+#[repr(C)]
+struct MemoryRangeEntry {
+    address: *mut std::ffi::c_void,
+    bytes: usize,
+}
+
+#[cfg(windows)]
+#[link(name = "kernel32")]
+unsafe extern "system" {
+    fn GetCurrentProcess() -> isize;
+    fn PrefetchVirtualMemory(process: isize, entries: usize, ranges: *const MemoryRangeEntry, flags: u32) -> i32;
+}
+
+/// MADV_WILLNEED's Windows counterpart: queue the mapped range's reads without waiting for them.
+#[cfg(windows)]
+unsafe fn madvise(addr: *mut std::ffi::c_void, len: usize, _advice: i32) -> i32 {
+    let range = MemoryRangeEntry { address: addr, bytes: len };
+    if unsafe { PrefetchVirtualMemory(GetCurrentProcess(), 1, &range, 0) } != 0 { 0 } else { -1 }
+}
+
+/// Windows has no page-residency query for a mapping; DSX_PROF's cold-row count reads as unavailable.
+#[cfg(windows)]
+unsafe fn mincore(_addr: *mut std::ffi::c_void, _len: usize, _vec: *mut u8) -> i32 {
+    -1
 }
 const MADV_WILLNEED: i32 = 3;
 const PAGE: usize = 4096;
