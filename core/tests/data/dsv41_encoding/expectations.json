@@ -1,0 +1,154 @@
+{
+  "official_1": {
+    "known_difference": {
+      "byte": 2476,
+      "server": "official_1.server.txt"
+    },
+    "images": 0
+  },
+  "official_2": {
+    "known_difference": {
+      "byte": 294,
+      "server": "official_2.server.txt"
+    },
+    "images": 0
+  },
+  "official_3": {
+    "known_difference": {
+      "byte": 242,
+      "server": "official_3.server.txt"
+    },
+    "images": 0
+  },
+  "official_4": {
+    "known_difference": {
+      "byte": 527,
+      "server": "official_4.server.txt"
+    },
+    "images": 0
+  },
+  "official_5_legacy_tokenizer": {
+    "known_difference": {
+      "byte": 251,
+      "server": "official_5_legacy_tokenizer.server.txt"
+    },
+    "images": 2
+  },
+  "effort_absent": {
+    "images": 0
+  },
+  "effort_low": {
+    "images": 0
+  },
+  "effort_high": {
+    "images": 0
+  },
+  "effort_xhigh": {
+    "images": 0
+  },
+  "effort_max": {
+    "images": 0
+  },
+  "effort_none": {
+    "images": 0
+  },
+  "effort_1": {
+    "expected_error": "invalid JSON request: invalid type: integer `1`, expected string or map"
+  },
+  "effort_37": {
+    "expected_error": "invalid JSON request: invalid type: integer `37`, expected string or map"
+  },
+  "effort_88": {
+    "expected_error": "invalid JSON request: invalid type: integer `88`, expected string or map"
+  },
+  "effort_100": {
+    "images": 0
+  },
+  "effort_50": {
+    "images": 0
+  },
+  "effort_75": {
+    "images": 0
+  },
+  "thinking_on": {
+    "images": 0
+  },
+  "thinking_off": {
+    "images": 0
+  },
+  "boolean_on": {
+    "images": 0
+  },
+  "boolean_off": {
+    "images": 0
+  },
+  "kwargs_off": {
+    "images": 0
+  },
+  "kwargs_high": {
+    "images": 0
+  },
+  "kwargs_100": {
+    "images": 0
+  },
+  "kwargs_37": {
+    "expected_error": "invalid JSON request: invalid type: integer `37`, expected string or map"
+  },
+  "explicit_wins": {
+    "images": 0
+  },
+  "none_explicit_on": {
+    "images": 0
+  },
+  "history_on": {
+    "known_difference": {
+      "byte": 177,
+      "server": "history_on.server.txt"
+    },
+    "images": 0
+  },
+  "history_off": {
+    "images": 0
+  },
+  "history_keep": {
+    "images": 0
+  },
+  "tools_parallel": {
+    "images": 0
+  },
+  "tools_parallel_off": {
+    "images": 0
+  },
+  "tool_turn_current": {
+    "images": 0
+  },
+  "tool_turn_completed": {
+    "known_difference": {
+      "byte": 205,
+      "server": "tool_turn_completed.server.txt"
+    },
+    "images": 0
+  },
+  "mid_system": {
+    "images": 0
+  },
+  "mid_system_on": {
+    "known_difference": {
+      "byte": 177,
+      "server": "mid_system_on.server.txt"
+    },
+    "images": 0
+  },
+  "pi_like": {
+    "images": 0
+  },
+  "official_5": {
+    "images": 2
+  },
+  "effort_37_off": {
+    "images": 0
+  },
+  "kwargs_37_off": {
+    "images": 0
+  }
+}

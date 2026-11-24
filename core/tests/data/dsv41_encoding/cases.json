@@ -1,0 +1,406 @@
+{
+  "reference_sha256": "13231c592e958fb39e2af6001dae69d90e7a36b265702b9b390236fb387599e2",
+  "cases": [
+    {
+      "name": "official_1",
+      "request": "official_1.request.json",
+      "reference": "test_output_1.txt",
+      "mode": "thinking",
+      "effort": null,
+      "drop_thinking": true,
+      "context": null,
+      "notes": "OpenAI transport: explicit thinking; missing call/result IDs supplied; empty tool_calls omitted; local image paths replaced by data URLs."
+    },
+    {
+      "name": "official_2",
+      "request": "official_2.request.json",
+      "reference": "test_output_2.txt",
+      "mode": "chat",
+      "effort": null,
+      "drop_thinking": true,
+      "context": null,
+      "notes": "OpenAI transport: explicit thinking; missing call/result IDs supplied; empty tool_calls omitted; local image paths replaced by data URLs."
+    },
+    {
+      "name": "official_3",
+      "request": "official_3.request.json",
+      "reference": "test_output_3.txt",
+      "mode": "chat",
+      "effort": null,
+      "drop_thinking": true,
+      "context": null,
+      "notes": "OpenAI transport: explicit thinking; missing call/result IDs supplied; empty tool_calls omitted; local image paths replaced by data URLs."
+    },
+    {
+      "name": "official_4",
+      "request": "official_4.request.json",
+      "reference": "test_output_4.txt",
+      "mode": "chat",
+      "effort": null,
+      "drop_thinking": true,
+      "context": null,
+      "notes": "OpenAI transport: explicit thinking; missing call/result IDs supplied; empty tool_calls omitted; local image paths replaced by data URLs."
+    },
+    {
+      "name": "official_5",
+      "request": "official_5.request.json",
+      "reference": "test_output_5.txt",
+      "mode": "thinking",
+      "effort": "max",
+      "drop_thinking": true,
+      "context": null,
+      "notes": "OpenAI transport: explicit thinking; missing call/result IDs supplied; empty tool_calls omitted; local image paths replaced by data URLs."
+    },
+    {
+      "name": "official_5_legacy_tokenizer",
+      "request": "official_5.request.json",
+      "reference": "test_output_5.txt",
+      "mode": "thinking",
+      "effort": "max",
+      "drop_thinking": true,
+      "context": null,
+      "notes": "Same vision request; actual image token at IMAGE_TOKEN_ID in tokenizer-v41.json.gz.",
+      "image_token": "repository_fixture"
+    },
+    {
+      "name": "effort_absent",
+      "request": "effort_absent.request.json",
+      "reference": "effort_absent.reference.txt",
+      "mode": "thinking",
+      "effort": null,
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "effort_low",
+      "request": "effort_low.request.json",
+      "reference": "effort_low.reference.txt",
+      "mode": "thinking",
+      "effort": "low",
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "effort_high",
+      "request": "effort_high.request.json",
+      "reference": "effort_high.reference.txt",
+      "mode": "thinking",
+      "effort": "high",
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "effort_xhigh",
+      "request": "effort_xhigh.request.json",
+      "reference": "effort_xhigh.reference.txt",
+      "mode": "thinking",
+      "effort": "high",
+      "drop_thinking": true,
+      "context": null,
+      "notes": "xhigh is an API alias of high (75), not a reference spelling."
+    },
+    {
+      "name": "effort_max",
+      "request": "effort_max.request.json",
+      "reference": "effort_max.reference.txt",
+      "mode": "thinking",
+      "effort": "max",
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "effort_none",
+      "request": "effort_none.request.json",
+      "reference": "effort_none.reference.txt",
+      "mode": "chat",
+      "effort": null,
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "effort_1",
+      "request": "effort_1.request.json",
+      "reference": "effort_1.reference.txt",
+      "mode": "thinking",
+      "effort": 1,
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "effort_37",
+      "request": "effort_37.request.json",
+      "reference": "effort_37.reference.txt",
+      "mode": "thinking",
+      "effort": 37,
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "effort_88",
+      "request": "effort_88.request.json",
+      "reference": "effort_88.reference.txt",
+      "mode": "thinking",
+      "effort": 88,
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "effort_100",
+      "request": "effort_100.request.json",
+      "reference": "effort_100.reference.txt",
+      "mode": "thinking",
+      "effort": 100,
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "effort_50",
+      "request": "effort_50.request.json",
+      "reference": "effort_50.reference.txt",
+      "mode": "thinking",
+      "effort": 50,
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "effort_75",
+      "request": "effort_75.request.json",
+      "reference": "effort_75.reference.txt",
+      "mode": "thinking",
+      "effort": 75,
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "thinking_on",
+      "request": "thinking_on.request.json",
+      "reference": "thinking_on.reference.txt",
+      "mode": "thinking",
+      "effort": null,
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "thinking_off",
+      "request": "thinking_off.request.json",
+      "reference": "thinking_off.reference.txt",
+      "mode": "chat",
+      "effort": "max",
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "boolean_on",
+      "request": "boolean_on.request.json",
+      "reference": "boolean_on.reference.txt",
+      "mode": "thinking",
+      "effort": null,
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "boolean_off",
+      "request": "boolean_off.request.json",
+      "reference": "boolean_off.reference.txt",
+      "mode": "chat",
+      "effort": null,
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "kwargs_off",
+      "request": "kwargs_off.request.json",
+      "reference": "kwargs_off.reference.txt",
+      "mode": "chat",
+      "effort": null,
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "kwargs_high",
+      "request": "kwargs_high.request.json",
+      "reference": "kwargs_high.reference.txt",
+      "mode": "thinking",
+      "effort": "high",
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "kwargs_100",
+      "request": "kwargs_100.request.json",
+      "reference": "kwargs_100.reference.txt",
+      "mode": "thinking",
+      "effort": 100,
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "kwargs_37",
+      "request": "kwargs_37.request.json",
+      "reference": "kwargs_37.reference.txt",
+      "mode": "thinking",
+      "effort": 37,
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "effort_37_off",
+      "request": "effort_37_off.request.json",
+      "reference": "effort_37_off.reference.txt",
+      "mode": "chat",
+      "effort": 37,
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "kwargs_37_off",
+      "request": "kwargs_37_off.request.json",
+      "reference": "kwargs_37_off.reference.txt",
+      "mode": "chat",
+      "effort": 37,
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "explicit_wins",
+      "request": "explicit_wins.request.json",
+      "reference": "explicit_wins.reference.txt",
+      "mode": "thinking",
+      "effort": "low",
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "none_explicit_on",
+      "request": "none_explicit_on.request.json",
+      "reference": "none_explicit_on.reference.txt",
+      "mode": "thinking",
+      "effort": null,
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "history_on",
+      "request": "history_on.request.json",
+      "reference": "history_on.reference.txt",
+      "mode": "thinking",
+      "effort": null,
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "history_off",
+      "request": "history_off.request.json",
+      "reference": "history_off.reference.txt",
+      "mode": "chat",
+      "effort": null,
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "history_keep",
+      "request": "history_keep.request.json",
+      "reference": "history_keep.reference.txt",
+      "mode": "thinking",
+      "effort": null,
+      "drop_thinking": false,
+      "context": null,
+      "notes": "Diagnostic: HTTP has no drop_thinking option; reference explicitly retains history."
+    },
+    {
+      "name": "tools_parallel",
+      "request": "tools_parallel.request.json",
+      "reference": "tools_parallel.reference.txt",
+      "mode": "thinking",
+      "effort": "high",
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "tools_parallel_off",
+      "request": "tools_parallel_off.request.json",
+      "reference": "tools_parallel_off.reference.txt",
+      "mode": "chat",
+      "effort": null,
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "tool_turn_current",
+      "request": "tool_turn_current.request.json",
+      "reference": "tool_turn_current.reference.txt",
+      "mode": "thinking",
+      "effort": null,
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "tool_turn_completed",
+      "request": "tool_turn_completed.request.json",
+      "reference": "tool_turn_completed.reference.txt",
+      "mode": "thinking",
+      "effort": null,
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "mid_system",
+      "request": "mid_system.request.json",
+      "reference": "mid_system.reference.txt",
+      "mode": "chat",
+      "effort": null,
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "mid_system_on",
+      "request": "mid_system_on.request.json",
+      "reference": "mid_system_on.reference.txt",
+      "mode": "thinking",
+      "effort": null,
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    },
+    {
+      "name": "pi_like",
+      "request": "pi_like.request.json",
+      "reference": "pi_like.reference.txt",
+      "mode": "thinking",
+      "effort": "high",
+      "drop_thinking": true,
+      "context": null,
+      "notes": ""
+    }
+  ]
+}

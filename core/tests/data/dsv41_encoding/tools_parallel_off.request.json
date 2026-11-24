@@ -1,0 +1,131 @@
+{
+  "messages": [
+    {
+      "role": "system",
+      "content": "Use tools carefully."
+    },
+    {
+      "role": "user",
+      "content": "Find and store café."
+    },
+    {
+      "role": "assistant",
+      "content": "Checking.",
+      "reasoning_content": "Need both tools.",
+      "tool_calls": [
+        {
+          "id": "a",
+          "type": "function",
+          "function": {
+            "name": "lookup",
+            "arguments": "{\"query\": \"café\", \"limit\": 2, \"exact\": true}"
+          }
+        },
+        {
+          "id": "b",
+          "type": "function",
+          "function": {
+            "name": "store",
+            "arguments": "{\"record\": {\"label\": \"中文\"}, \"tags\": [\"a\", \"b\"]}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "b",
+      "content": "stored second"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "a",
+      "content": "found first"
+    },
+    {
+      "role": "assistant",
+      "content": "Done.",
+      "reasoning_content": "Both completed."
+    },
+    {
+      "role": "user",
+      "content": "What next?"
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "lookup",
+        "description": "Execute lookup",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string"
+            },
+            "limit": {
+              "type": "integer"
+            },
+            "exact": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "query",
+            "limit",
+            "exact"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "store",
+        "description": "Execute store",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "record": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string"
+                }
+              }
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "record",
+            "tags"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "finish",
+        "description": "Execute finish",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      }
+    }
+  ],
+  "thinking": false
+}

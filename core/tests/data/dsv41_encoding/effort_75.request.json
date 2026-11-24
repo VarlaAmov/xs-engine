@@ -1,0 +1,9 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Question: café, 中文, <think>literal</think>?"
+    }
+  ],
+  "reasoning_effort": 75
+}

@@ -1,0 +1,3 @@
+[build]
+# Build for the local CPU. Rebuild on the target CPU before deployment.
+rustflags = ["-C", "target-cpu=native"]

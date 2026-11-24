@@ -1,0 +1,1 @@
+<｜begin▁of▁sentence｜><｜System｜>Be precise.<｜User｜>q1<｜Assistant｜></think>a1<｜end▁of▁sentence｜><｜System｜>New instruction: answer briefly.<｜Assistant｜></think>

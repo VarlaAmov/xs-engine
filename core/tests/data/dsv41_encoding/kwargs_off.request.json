@@ -1,0 +1,11 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Question: café, 中文, <think>literal</think>?"
+    }
+  ],
+  "chat_template_kwargs": {
+    "enable_thinking": false
+  }
+}

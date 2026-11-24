@@ -1,0 +1,17 @@
+<｜begin▁of▁sentence｜><｜System｜>Reasoning Effort: 75 (range 1-100, the higher the value, the more thorough the reasoning)
+
+Use tools carefully.<｜User｜>Find and store café.<｜Assistant｜><think>Need both tools.</think>Checking.
+
+<｜DSML｜ calls>
+<｜DSML｜ invoke name="lookup">
+<｜DSML｜ parameter name="query" string="true">café</｜DSML｜ parameter>
+<｜DSML｜ parameter name="limit" string="false">2</｜DSML｜ parameter>
+<｜DSML｜ parameter name="exact" string="false">true</｜DSML｜ parameter>
+</｜DSML｜ invoke>
+<｜DSML｜ invoke name="store">
+<｜DSML｜ parameter name="record" string="false">{"label": "中文"}</｜DSML｜ parameter>
+<｜DSML｜ parameter name="tags" string="false">["a", "b"]</｜DSML｜ parameter>
+</｜DSML｜ invoke>
+</｜DSML｜ calls><｜end▁of▁sentence｜><｜User｜><tool_result>found first</tool_result>
+
+<tool_result>stored second</tool_result><｜Assistant｜><think>
